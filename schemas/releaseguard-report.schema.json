@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jerry0327/ReleaseGuard/schemas/releaseguard-report.schema.json",
+  "title": "ReleaseGuard evidence report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "base",
+    "head",
+    "decision",
+    "risk_score",
+    "fail_on",
+    "changed_files",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "ReleaseGuard"},
+        "version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "base": {"type": "string", "minLength": 1},
+    "head": {"type": "string", "minLength": 1},
+    "decision": {"enum": ["PASS", "BLOCK"]},
+    "risk_score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "fail_on": {"$ref": "#/$defs/severity"},
+    "changed_files": {"type": "integer", "minimum": 0},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "review_evidence": {"$ref": "#/$defs/reviewEvidence"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "severity": {
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "finding": {
+      "type": "object",
+      "required": ["rule_id", "severity", "title", "detail", "path", "remediation"],
+      "properties": {
+        "rule_id": {"type": "string", "pattern": "^RG[0-9]{3}$"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "title": {"type": "string", "minLength": 1},
+        "detail": {"type": "string", "minLength": 1},
+        "path": {"$ref": "#/$defs/nullableString"},
+        "remediation": {"$ref": "#/$defs/nullableString"}
+      },
+      "additionalProperties": true
+    },
+    "reviewEvidence": {
+      "type": "object",
+      "required": [
+        "status",
+        "required",
+        "required_on",
+        "minimum_approvals",
+        "approval_count",
+        "approvals",
+        "stale_approvals",
+        "self_approvals",
+        "bot_approvals",
+        "untrusted_approvals",
+        "changes_requested"
+      ],
+      "properties": {
+        "status": {"enum": ["not_required", "passed", "failed", "unavailable", "mismatch"]},
+        "required": {"type": "boolean"},
+        "required_on": {"$ref": "#/$defs/severity"},
+        "minimum_approvals": {"type": "integer", "minimum": 0, "maximum": 20},
+        "approval_count": {"type": "integer", "minimum": 0},
+        "repository": {"$ref": "#/$defs/nullableString"},
+        "pull_request": {"type": ["integer", "null"], "minimum": 1},
+        "author": {"$ref": "#/$defs/nullableString"},
+        "scanned_base_sha": {"$ref": "#/$defs/nullableString"},
+        "scanned_head_sha": {"$ref": "#/$defs/nullableString"},
+        "observed_base_sha": {"$ref": "#/$defs/nullableString"},
+        "observed_head_sha": {"$ref": "#/$defs/nullableString"},
+        "approvals": {"$ref": "#/$defs/stringArray"},
+        "stale_approvals": {"$ref": "#/$defs/stringArray"},
+        "self_approvals": {"$ref": "#/$defs/stringArray"},
+        "bot_approvals": {"$ref": "#/$defs/stringArray"},
+        "untrusted_approvals": {"$ref": "#/$defs/stringArray"},
+        "changes_requested": {"$ref": "#/$defs/stringArray"},
+        "detail": {"$ref": "#/$defs/nullableString"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

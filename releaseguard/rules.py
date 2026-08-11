@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from .config import PolicyConfig
 from .git import read_json_at_ref
-from .models import Change, Finding
+from .models import Change, Finding, SEVERITY_RANK
 
 DANGEROUS_INSTALL_HOOKS = ("preinstall", "install", "postinstall")
 RELEASE_HOOKS = ("prepare", "prepublish", "prepublishOnly")
@@ -213,6 +213,10 @@ def size_findings(changes: list[Change], config: PolicyConfig) -> list[Finding]:
     ]
 
 
+def sort_findings(findings: list[Finding]) -> list[Finding]:
+    return sorted(findings, key=lambda item: (-SEVERITY_RANK[item.severity], item.rule_id, item.path or ""))
+
+
 def run_rules(
     changes: list[Change],
     config: PolicyConfig,
@@ -227,4 +231,4 @@ def run_rules(
     findings.extend(package_json_findings(changes, config, base, head, reader))
     findings.extend(manifest_lock_findings(changes, config))
     findings.extend(size_findings(changes, config))
-    return sorted(findings, key=lambda item: (-{"low": 1, "medium": 2, "high": 3, "critical": 4}[item.severity], item.rule_id, item.path or ""))
+    return sort_findings(findings)
