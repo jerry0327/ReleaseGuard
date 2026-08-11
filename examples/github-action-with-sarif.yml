@@ -1,4 +1,4 @@
-name: ReleaseGuard
+name: ReleaseGuard with code scanning
 
 on:
   pull_request:
@@ -6,6 +6,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  security-events: write
 
 jobs:
   releaseguard:
@@ -16,12 +17,15 @@ jobs:
           fetch-depth: 0
 
       - uses: jerry0327/ReleaseGuard@main
-        id: releaseguard
         with:
-          config: releaseguard.toml
-          report-path: releaseguard-report.json
-          sarif-path: releaseguard.sarif
           github-token: ${{ github.token }}
+
+      - name: Upload ReleaseGuard SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        with:
+          sarif_file: releaseguard.sarif
+          category: releaseguard
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
@@ -30,4 +34,3 @@ jobs:
           path: |
             releaseguard-report.json
             releaseguard.sarif
-          if-no-files-found: ignore

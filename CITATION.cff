@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: ReleaseGuard
+message: If ReleaseGuard supports your research or software supply-chain work, cite the project repository and the version or commit used.
+type: software
+authors:
+  - name: ReleaseGuard contributors
+repository-code: https://github.com/jerry0327/ReleaseGuard
+license: MIT
+version: 0.2.0
+date-released: 2026-08-12

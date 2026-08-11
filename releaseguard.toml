@@ -15,8 +15,6 @@ lockfile_paths = [
   "Cargo.lock",
 ]
 
-# Changes here are high-scrutiny because they can alter how a release is built,
-# approved, or published.
 protected_patterns = [
   ".github/workflows/**",
   ".github/CODEOWNERS",
@@ -26,5 +24,15 @@ protected_patterns = [
   "scripts/release/**",
 ]
 
-# Binary changes outside these paths are reported as high severity.
 allowed_binary_patterns = ["docs/**", "assets/**"]
+
+[releaseguard.review]
+# Set to 1 or more to require fresh, independent approval when a finding reaches
+# required_on. Zero keeps review evidence disabled for initial adoption.
+minimum_independent_approvals = 0
+required_on = "high"
+allow_stale_approvals = false
+exclude_bots = true
+fail_closed = true
+allowed_author_associations = ["OWNER", "MEMBER", "COLLABORATOR"]
+trusted_reviewers = []

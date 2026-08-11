@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "releaseguard"
-version = "0.1.0"
+version = "0.2.0"
 description = "A deterministic security gate for software release diffs"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "ReleaseGuard contributors"}]
-keywords = ["supply-chain", "security", "github-actions", "release", "oss"]
+keywords = ["supply-chain", "security", "github-actions", "release", "oss", "sarif"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: MIT License",

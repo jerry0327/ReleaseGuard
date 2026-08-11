@@ -1,0 +1,10 @@
+# Default ownership
+* @jerry0327
+
+# Security-sensitive release surfaces
+/.github/workflows/ @jerry0327
+/.github/CODEOWNERS @jerry0327
+/action.yml @jerry0327
+/releaseguard/ @jerry0327
+/releaseguard.toml @jerry0327
+/SECURITY.md @jerry0327

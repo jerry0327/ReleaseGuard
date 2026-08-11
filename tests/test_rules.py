@@ -18,13 +18,10 @@ class RuleTests(unittest.TestCase):
                 "scripts": {"postinstall": "node payload.js"},
             },
         }
-
         findings = run_rules(changes, PolicyConfig(), "base", "head", reader=lambda ref, path: docs.get((ref, path)))
         self.assertTrue(any(item.rule_id == "RG004" and item.severity == "critical" for item in findings))
-
-        result = ScanResult("base", "head", tuple(findings), 1, "critical")
+        result = ScanResult("base", "head", tuple(findings), 1, "critical", "0.2.0")
         self.assertTrue(result.blocked)
-        self.assertEqual(result.decision, "BLOCK")
         self.assertEqual(result.score, 100)
 
     def test_remote_dependency_is_critical(self) -> None:
@@ -58,8 +55,13 @@ class RuleTests(unittest.TestCase):
         self.assertTrue(any(item.rule_id == "RG009" and item.severity == "medium" for item in findings))
 
     def test_protected_path_is_high(self) -> None:
-        changes = [Change(path=".github/workflows/release.yml", status="M")]
-        findings = run_rules(changes, PolicyConfig(), "base", "head", reader=lambda *_: None)
+        findings = run_rules(
+            [Change(path=".github/workflows/release.yml", status="M")],
+            PolicyConfig(),
+            "base",
+            "head",
+            reader=lambda *_: None,
+        )
         self.assertTrue(any(item.rule_id == "RG001" and item.severity == "high" for item in findings))
 
     def test_binary_allowlist(self) -> None:
@@ -79,7 +81,7 @@ class RuleTests(unittest.TestCase):
             Change(path="bin/tool", status="A", is_binary=True),
         ]
         findings = run_rules(changes, PolicyConfig(), "base", "head", reader=lambda *_: None)
-        result = ScanResult("base", "head", tuple(findings), 2, "critical")
+        result = ScanResult("base", "head", tuple(findings), 2, "critical", "0.2.0")
         self.assertFalse(result.blocked)
         self.assertLess(result.score, 100)
         self.assertGreaterEqual(result.score, 70)

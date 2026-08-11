@@ -19,8 +19,18 @@ def markdown_summary(result: ScanResult) -> str:
         f"- Findings: **{len(result.findings)}**",
         f"- Changed files: **{result.changed_files}**",
         f"- Blocking threshold: **{result.fail_on}**",
-        "",
     ]
+
+    evidence = result.review_evidence
+    if evidence is not None and (evidence.required or evidence.minimum_approvals > 0):
+        lines.extend(
+            [
+                f"- Review evidence: **{evidence.status}**",
+                f"- Independent approvals: **{evidence.approval_count}/{evidence.minimum_approvals}**",
+            ]
+        )
+    lines.append("")
+
     if not result.findings:
         lines.append("No policy findings were detected in the release delta.")
         return "\n".join(lines) + "\n"
@@ -30,5 +40,5 @@ def markdown_summary(result: ScanResult) -> str:
         path = finding.path or "—"
         title = finding.title.replace("|", "\\|")
         lines.append(f"| {finding.severity.upper()} | `{finding.rule_id}` | `{path}` | {title} |")
-    lines.extend(["", "Review the JSON evidence report for details and remediation guidance."])
+    lines.extend(["", "Review the JSON and SARIF evidence reports for details and remediation guidance."])
     return "\n".join(lines) + "\n"
