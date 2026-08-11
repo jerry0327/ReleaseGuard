@@ -1,19 +1,26 @@
 # SARIF integration
 
-ReleaseGuard writes `releaseguard.sarif` using SARIF 2.1.0. The report can be retained as a workflow artifact or uploaded to GitHub code scanning.
+ReleaseGuard writes SARIF 2.1.0 for both repository scans and npm provenance verification. SARIF is an interoperable presentation of findings; the JSON evidence report and ReleaseGuard exit code remain authoritative.
 
-## Contents
+## Repository scan SARIF
 
-Each finding includes:
+Default path: `releaseguard.sarif`
 
-- the stable ReleaseGuard rule ID;
-- SARIF level derived from ReleaseGuard severity;
-- full evidence and remediation text;
-- a source path when the finding is path-specific;
-- a deterministic partial fingerprint; and
-- security and supply-chain tags.
+- source-file locations where applicable;
+- rule IDs `RG001`–`RG014`;
+- `releaseguard/v1` partial fingerprints; and
+- scan base/head and decision metadata.
 
-Severity mapping:
+## npm provenance SARIF
+
+Default path: `releaseguard-npm.sarif`
+
+- package URL locations, for example `pkg:npm/%40scope/name@1.2.3`;
+- rule IDs `RG015`–`RG025`;
+- `releaseguard/npm-v1` partial fingerprints bound to package/version; and
+- expected/observed release identity metadata.
+
+## Severity mapping
 
 | ReleaseGuard | SARIF level | Security severity |
 |---|---|---:|
@@ -22,11 +29,9 @@ Severity mapping:
 | High | `error` | 8.0 |
 | Critical | `error` | 9.8 |
 
-The ReleaseGuard decision remains authoritative. SARIF levels are presentation metadata and do not change `fail_on` behavior.
+SARIF `error` does not independently determine whether ReleaseGuard exits `2`; `fail_on` remains the policy threshold.
 
-## Artifact-only use
-
-Artifact retention needs no `security-events` permission:
+## Artifact-only retention
 
 ```yaml
 - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -36,11 +41,16 @@ Artifact retention needs no `security-events` permission:
     path: |
       releaseguard-report.json
       releaseguard.sarif
+      releaseguard-npm-report.json
+      releaseguard-npm.sarif
+    if-no-files-found: ignore
 ```
+
+Artifact retention needs no `security-events` permission.
 
 ## Upload to GitHub code scanning
 
-Code-scanning upload is opt-in. The workflow needs `security-events: write` in addition to read access:
+Code-scanning upload is opt-in and requires `security-events: write` where supported:
 
 ```yaml
 permissions:
@@ -49,26 +59,25 @@ permissions:
   security-events: write
 
 steps:
-  - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-    with:
-      fetch-depth: 0
-
-  - uses: jerry0327/ReleaseGuard@main
-    with:
-      github-token: ${{ github.token }}
-
-  - name: Upload ReleaseGuard SARIF
+  - name: Upload ReleaseGuard repository SARIF
     if: always()
     uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
     with:
       sarif_file: releaseguard.sarif
-      category: releaseguard
+      category: releaseguard-repository
+
+  - name: Upload ReleaseGuard npm SARIF
+    if: always()
+    uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+    with:
+      sarif_file: releaseguard-npm.sarif
+      category: releaseguard-npm
 ```
 
-Code-scanning availability and token behavior differ between public repositories, private repositories, GitHub Enterprise Cloud, GitHub Enterprise Server, and pull requests from forks. Keep artifact upload enabled even when SARIF upload is unavailable so the policy evidence is not lost.
+Code-scanning availability and token behavior differ by repository type and fork context. Keep artifact retention enabled even when code-scanning upload is unavailable.
 
-## Fingerprints
+## Fingerprint compatibility
 
-ReleaseGuard fingerprints are derived from rule ID, path, title, and evidence detail. This is intended to keep the same finding stable across repeated scans while allowing materially different evidence to produce a new identity.
+Repository fingerprints preserve the original v0.2 input material under `releaseguard/v1`. npm fingerprints use a separate namespace and include exact package/version context.
 
-Fingerprint compatibility is versioned independently as `releaseguard/v1` inside `partialFingerprints`.
+An intentional fingerprint identity change requires a new namespace and changelog entry.

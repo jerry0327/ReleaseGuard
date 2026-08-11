@@ -1,6 +1,6 @@
 # Rules and rationale
 
-ReleaseGuard rule IDs are intended to remain stable. Severity or wording can evolve before 1.0, but incompatible semantic changes will be documented in the changelog.
+ReleaseGuard rule IDs are intended to remain stable. Severity or wording can evolve before 1.0, but incompatible semantic changes are documented in the changelog.
 
 ## Repository-delta rules
 
@@ -17,8 +17,6 @@ Matches configured `protected_patterns`, including workflows, CODEOWNERS, action
 **Severity:** High
 
 Git marks a changed path as binary outside `allowed_binary_patterns`. Binary diffs are materially harder to review and can conceal executable content.
-
-**Expected false positives:** checked-in fixtures, media, or generated assets outside configured asset paths.
 
 ### RG003 — Executable bit introduced
 
@@ -66,7 +64,7 @@ The package version changed while no configured changelog path changed.
 
 **Severity:** Low
 
-A configured manifest changed but no configured lockfile changed. This is generic in v0.2; ecosystem-specific consistency checks are roadmap work.
+A configured manifest changed but no configured lockfile changed. This is generic; ecosystem-specific consistency checks remain roadmap work.
 
 ### RG011 — Release delta unusually large
 
@@ -80,7 +78,7 @@ The number of changed files exceeds `max_changed_files`. Large deltas can hide s
 
 **Severity:** Critical
 
-The review gate was triggered, but the number of fresh, independent, trusted approvals was below policy. The finding includes excluded stale, self, bot, and untrusted approvals plus active changes-requested states.
+The review gate was triggered, but the number of fresh, independent, trusted approvals was below policy. Evidence includes excluded stale, self, bot, and untrusted approvals plus active changes-requested states.
 
 ### RG013 — Required review evidence unavailable
 
@@ -93,3 +91,79 @@ The gate required GitHub evidence, but repository/PR context, token permission, 
 **Severity:** Critical
 
 The scanned range does not match the pull-request event/API range. Review evidence is rejected instead of being reused across the mismatch.
+
+## Published npm provenance rules
+
+### RG015 — npm provenance missing
+
+**Severity:** High
+
+The exact package version's registry metadata does not advertise an attestation endpoint. No cryptographic provenance evaluation can proceed.
+
+**Expected transient case:** newly published metadata may not have propagated. The npm Action retries by default.
+
+### RG016 — npm attestation verification failed
+
+**Severity:** Critical
+
+The official npm verifier rejected the target package's registry signature, Sigstore attestation, certificate/log evidence, or package subject. A target package that is absent from npm's verified result is also rejected.
+
+### RG017 — npm cryptographic verifier unavailable
+
+**Severity:** Critical
+
+ReleaseGuard could not obtain a supported npm verifier result because npm is missing/too old, the registry/network is unavailable, the command timed out, or expected JSON could not be obtained safely.
+
+This is a policy finding rather than an accidental pass.
+
+### RG018 — npm trusted publisher missing
+
+**Severity:** High
+
+Policy requires GitHub trusted publishing, but registry metadata does not contain both `trustedPublisher.id = "github"` and a non-empty OIDC configuration ID.
+
+Valid provenance can exist without this marker during token-based publication; use the explicit migration option only when that weaker credential model is intentional.
+
+### RG019 — npm provenance repository mismatch
+
+**Severity:** Critical
+
+The cryptographically verified SLSA statement identifies a different GitHub repository, or no supported repository identity.
+
+### RG020 — npm provenance workflow mismatch
+
+**Severity:** Critical
+
+The verified statement identifies another workflow path or omits a supported workflow identity.
+
+### RG021 — npm provenance commit mismatch
+
+**Severity:** Critical
+
+The verified statement identifies another source commit or omits a canonical commit claim.
+
+### RG022 — npm provenance ref mismatch
+
+**Severity:** High
+
+The verified statement identifies another branch/tag ref or omits the ref while the caller constrained one.
+
+### RG023 — npm provenance builder mismatch
+
+**Severity:** Critical
+
+The verified statement names another SLSA builder identity. The default is GitHub's hosted runner builder.
+
+### RG024 — npm attestation metadata malformed or unsupported
+
+**Severity:** Critical
+
+npm cryptographically accepted the bundle, but ReleaseGuard cannot safely interpret its in-toto/SLSA structure. Examples include malformed DSSE JSON, conflicting provenance identities, unsupported statement type, unexpected package subject, or non-canonical SHA-512 subject digest.
+
+This fail-closed behavior prevents a new or ambiguous schema from being silently interpreted as the old one.
+
+### RG025 — npm registry publish/release attestation missing
+
+**Severity:** High
+
+The verified bundle contains build provenance but no recognized npm publish attestation or in-toto release attestation. This reduces evidence that the registry accepted the specific artifact as a publication event.

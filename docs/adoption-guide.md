@@ -1,10 +1,10 @@
 # Adoption guide
 
-ReleaseGuard is intended to become stricter in stages. Enabling every control immediately on a mature repository can create avoidable noise and encourage unsafe blanket exceptions.
+ReleaseGuard should become stricter in stages. Enabling every control immediately on a mature repository can create avoidable noise and encourage unsafe blanket exceptions.
 
-## Stage 1 — observe critical release mutations
+## Stage 1 — observe critical repository mutations
 
-Use the default threshold and keep review evidence disabled:
+Use the default repository threshold and keep review evidence disabled:
 
 ```toml
 [releaseguard]
@@ -14,9 +14,7 @@ fail_on = "critical"
 minimum_independent_approvals = 0
 ```
 
-At this stage, install-time npm execution and non-registry dependency redirection block. High, medium, and low findings remain visible in the job summary and evidence artifacts.
-
-Recommended duration: enough release PRs to understand expected workflow, binary, and dependency findings.
+Install-time npm execution and non-registry dependency redirection block. High, medium, and low findings remain visible.
 
 ## Stage 2 — enforce high-risk release controls
 
@@ -29,7 +27,7 @@ fail_on = "high"
 
 This blocks protected release-control changes, unexpected binaries, executable-bit introductions, release hooks, and new production dependency surface.
 
-Do not solve recurring findings by broad patterns such as `"**"`. Keep allowlists narrow and document why a path contains reviewed binary content.
+Do not solve recurring findings with broad patterns such as `"**"`. Keep allowlists narrow and document why each path is trusted.
 
 ## Stage 3 — require independent review
 
@@ -45,35 +43,66 @@ fail_closed = true
 allowed_author_associations = ["OWNER", "MEMBER", "COLLABORATOR"]
 ```
 
-Test this in a pull request that intentionally changes a protected path. Confirm that:
+Test with a pull request that intentionally changes a protected path. Confirm that author self-approval and stale approval do not count.
 
-1. the action reports `RG012` before approval;
-2. author self-approval is excluded;
-3. an authorized collaborator's fresh approval is counted; and
-4. pushing another commit makes the prior approval stale unless the repository itself dismisses or revalidates it first.
+## Stage 4 — adopt npm trusted publishing
 
-## Stage 4 — integrate release protections
+Before adding the post-publish gate:
 
-ReleaseGuard is strongest alongside platform controls:
+1. configure npm trusted publishing for the exact GitHub organization/user, repository, and workflow;
+2. grant `id-token: write` only to the publishing job;
+3. remove reusable npm publish tokens from that workflow;
+4. use an exact package version from `package.json`; and
+5. publish from a protected branch/tag and environment as appropriate.
 
-- require the ReleaseGuard job before merge or deployment;
-- protect default and release branches;
-- require review for CODEOWNERS paths;
-- protect the publishing environment;
-- use short-lived trusted-publishing/OIDC credentials;
-- retain JSON and SARIF evidence with release records; and
-- pin third-party actions to reviewed commit SHAs.
+Use current Node.js/npm versions supported by trusted publishing and provenance.
+
+## Stage 5 — add the post-publish npm gate
+
+Run `actions/verify-npm` after publication and before deployment, announcement, image build, or other promotion:
+
+```yaml
+- uses: jerry0327/ReleaseGuard/actions/verify-npm@main
+  with:
+    package: ${{ steps.package.outputs.name }}
+    version: ${{ steps.package.outputs.version }}
+    repository: ${{ github.repository }}
+    workflow: .github/workflows/publish.yml
+    commit: ${{ github.sha }}
+    ref: ${{ github.ref }}
+```
+
+The default Action policy blocks every npm finding at high or critical severity. Keep the default trusted-publisher requirement unless a deliberate migration still uses token-published provenance.
+
+Registry evidence can lag publication. The Action retries six times by default. Do not replace a persistent failure with an unconditional `continue-on-error` in the promotion path.
+
+## Stage 6 — retain and optionally attest evidence
+
+Upload both JSON and SARIF with `if: always()` so blocked releases retain diagnostic evidence.
+
+A separate first-party GitHub artifact-attestation step can sign the JSON report. This signs the evidence file; it does not change the underlying npm verification result.
+
+## Platform controls
+
+ReleaseGuard is strongest alongside:
+
+- required checks;
+- protected branches and tags;
+- CODEOWNERS for workflows, Actions, policy, and release scripts;
+- protected deployment environments;
+- short-lived OIDC credentials;
+- pinned third-party Actions;
+- package ownership/MFA/recovery controls; and
+- retained release evidence.
 
 ## Monorepos
 
-v0.2 evaluates one repository-wide range and recognizes root-level package manifests. For monorepos with multiple package boundaries:
+Repository scanning remains repository-wide. npm verification evaluates one exact package/version per invocation. Call the npm Action once per published package and pass the package-specific expected release identity.
 
-- tune protected path patterns now;
-- avoid assuming root manifest rules cover every package; and
-- track first-class monorepo package-boundary support on the roadmap.
+First-class monorepo package-boundary policy remains roadmap work.
 
-## Offline and local scans
+## Offline and private-registry use
 
-Local scans work without GitHub access when review quorum is zero or no finding reaches the review trigger. When a quorum is required, provide repository/PR context and a token through `RELEASEGUARD_GITHUB_TOKEN`.
+Repository scanning is offline-capable. npm provenance verification is necessarily online and currently supports public or anonymously readable registries only.
 
-For an intentionally offline check, use a separate local configuration with `minimum_independent_approvals = 0` rather than weakening the repository's CI policy.
+Do not inject a private registry token into `verify-npm`; v0.3 intentionally strips credentials at the subprocess boundary.

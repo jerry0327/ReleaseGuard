@@ -6,9 +6,41 @@ All notable changes to ReleaseGuard are documented here.
 
 ### Planned
 
-- npm trusted-publishing and provenance verification.
-- Signed ReleaseGuard evidence envelopes.
-- First-class PyPI and Cargo dependency rules.
+- First-class PyPI and Cargo dependency/provenance rules.
+- Baseline and time-bounded exception policies.
+- Native signed ReleaseGuard evidence envelopes.
+
+## [0.3.0] - 2026-08-12
+
+### Added
+
+- `releaseguard verify-npm` for exact, post-publish npm package verification.
+- `actions/verify-npm` composite Action with pinned Node.js `24.18.1` setup and npm `11.19.0`.
+- Official npm CLI delegation for Sigstore signature, certificate, transparency-log, registry-signature, and package-subject verification.
+- SLSA provenance v1 and v0.2 claim extraction after cryptographic verification.
+- Compatible parsing for npm 11 object and npm 12 single-item array output from exact `npm view --json` queries.
+- Expected repository, workflow, commit, ref, builder, and trusted-publisher policy.
+- npm provenance findings `RG015` through `RG025`.
+- Explicit `missing`, `invalid`, `unavailable`, and `verified` evidence states.
+- Registry propagation retries for post-publish workflows.
+- npm provenance JSON schema version 1 and SARIF 2.1.0 output using package PURL locations.
+- Post-publish workflow examples, including optional first-party attestation of the ReleaseGuard report.
+- Unit, parser, policy, reporting, CLI, and subprocess-boundary tests.
+
+### Security
+
+- Exact package versions are required; npm tags and ranges are rejected.
+- Verification uses an isolated temporary npm project with lifecycle scripts, optional dependencies, and bin links disabled.
+- Verifier subprocesses receive an allowlisted environment; inherited GitHub, npm, Node, cloud, and other credentials plus arbitrary Node options are excluded.
+- Registry URLs require HTTPS, except localhost test endpoints, and cannot contain embedded credentials.
+- npm output, DSSE payload, attestation count, subprocess duration, retry count, and input identities are bounded and validated.
+- Raw Sigstore bundles, certificates, transparency-log entries, auth tokens, and package contents are not persisted in reports.
+
+### Changed
+
+- Package version advanced from `0.2.0` to `0.3.0`.
+- The README and threat model now separate repository-delta, review-authorization, and registry-artifact trust boundaries.
+- Native signed ReleaseGuard envelopes remain roadmap work; first-party GitHub artifact attestation integration is documented instead of claiming an incomplete signing implementation.
 
 ## [0.2.0] - 2026-08-12
 
