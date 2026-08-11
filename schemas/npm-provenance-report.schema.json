@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jerry0327/ReleaseGuard/schemas/npm-provenance-report.schema.json",
+  "title": "ReleaseGuard npm provenance report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report_type",
+    "tool",
+    "package",
+    "expected_identity",
+    "decision",
+    "risk_score",
+    "fail_on",
+    "findings",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "report_type": {"const": "npm-provenance"},
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "ReleaseGuard"},
+        "version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "package": {
+      "type": "object",
+      "required": ["name", "version", "registry"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "registry": {"type": "string", "format": "uri"}
+      },
+      "additionalProperties": false
+    },
+    "expected_identity": {
+      "type": "object",
+      "required": [
+        "repository",
+        "workflow",
+        "commit_sha",
+        "ref",
+        "builder_id",
+        "require_trusted_publisher"
+      ],
+      "properties": {
+        "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
+        "workflow": {"type": "string", "pattern": "^\\.github/workflows/.+\\.ya?ml$"},
+        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "ref": {"type": ["string", "null"]},
+        "builder_id": {"type": "string", "format": "uri"},
+        "require_trusted_publisher": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "decision": {"enum": ["PASS", "BLOCK"]},
+    "risk_score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "fail_on": {"$ref": "#/$defs/severity"},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "evidence": {"$ref": "#/$defs/evidence"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "severity": {"enum": ["low", "medium", "high", "critical"]},
+    "nullableString": {"type": ["string", "null"]},
+    "stringArray": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "finding": {
+      "type": "object",
+      "required": ["rule_id", "severity", "title", "detail", "path", "remediation"],
+      "properties": {
+        "rule_id": {"type": "string", "pattern": "^RG0(?:1[5-9]|2[0-5])$"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "title": {"type": "string", "minLength": 1},
+        "detail": {"type": "string", "minLength": 1},
+        "path": {"$ref": "#/$defs/nullableString"},
+        "remediation": {"$ref": "#/$defs/nullableString"}
+      },
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "status",
+        "verifier",
+        "npm_version",
+        "registry",
+        "package",
+        "version",
+        "attempts",
+        "verified_attestation_types",
+        "publish_attestation_types"
+      ],
+      "properties": {
+        "status": {"enum": ["verified", "missing", "invalid", "unavailable"]},
+        "verifier": {"type": "string", "minLength": 1},
+        "npm_version": {"$ref": "#/$defs/nullableString"},
+        "registry": {"type": "string", "format": "uri"},
+        "package": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "attempts": {"type": "integer", "minimum": 1, "maximum": 20},
+        "manifest_integrity": {"$ref": "#/$defs/nullableString"},
+        "tarball_url": {"$ref": "#/$defs/nullableString"},
+        "attestation_url": {"$ref": "#/$defs/nullableString"},
+        "trusted_publisher_id": {"$ref": "#/$defs/nullableString"},
+        "trusted_publisher_oidc_config_id": {"$ref": "#/$defs/nullableString"},
+        "statement_type": {"$ref": "#/$defs/nullableString"},
+        "predicate_type": {"$ref": "#/$defs/nullableString"},
+        "verified_attestation_types": {"$ref": "#/$defs/stringArray"},
+        "publish_attestation_types": {"$ref": "#/$defs/stringArray"},
+        "subject_name": {"$ref": "#/$defs/nullableString"},
+        "subject_sha512": {"$ref": "#/$defs/nullableString"},
+        "repository": {"$ref": "#/$defs/nullableString"},
+        "workflow": {"$ref": "#/$defs/nullableString"},
+        "commit_sha": {"$ref": "#/$defs/nullableString"},
+        "ref": {"$ref": "#/$defs/nullableString"},
+        "builder_id": {"$ref": "#/$defs/nullableString"},
+        "invocation_id": {"$ref": "#/$defs/nullableString"},
+        "detail": {"$ref": "#/$defs/nullableString"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

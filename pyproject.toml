@@ -4,18 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "releaseguard"
-version = "0.2.0"
-description = "A deterministic security gate for software release diffs"
+version = "0.3.0"
+description = "Deterministic release security and published package provenance gates"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "ReleaseGuard contributors"}]
-keywords = ["supply-chain", "security", "github-actions", "release", "oss", "sarif"]
+keywords = [
+  "supply-chain",
+  "security",
+  "github-actions",
+  "release",
+  "provenance",
+  "sigstore",
+  "slsa",
+  "sarif",
+  "oss",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Quality Assurance",
   "Topic :: Security",
 ]
