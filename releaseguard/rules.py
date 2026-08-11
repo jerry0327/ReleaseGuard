@@ -5,7 +5,8 @@ import re
 from typing import Any, Callable
 
 from .config import PolicyConfig
-from .git import read_json_at_ref
+from .ecosystems import ecosystem_findings
+from .git import read_json_at_ref, read_text_at_ref
 from .models import Change, Finding, SEVERITY_RANK
 
 DANGEROUS_INSTALL_HOOKS = ("preinstall", "install", "postinstall")
@@ -223,12 +224,14 @@ def run_rules(
     base: str,
     head: str,
     reader: Callable[[str, str], dict[str, Any] | None] = read_json_at_ref,
+    text_reader: Callable[[str, str], str | None] = read_text_at_ref,
 ) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(protected_path_findings(changes, config))
     findings.extend(binary_findings(changes, config))
     findings.extend(executable_findings(changes, config))
     findings.extend(package_json_findings(changes, config, base, head, reader))
+    findings.extend(ecosystem_findings(changes, base, head, text_reader))
     findings.extend(manifest_lock_findings(changes, config))
     findings.extend(size_findings(changes, config))
     return sort_findings(findings)
