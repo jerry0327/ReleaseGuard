@@ -1,0 +1,29 @@
+[releaseguard]
+# Critical findings block directly. High findings require a fresh approval through
+# the review policy below, but remain visible in the evidence report.
+fail_on = "critical"
+max_changed_files = 150
+
+changelog_paths = ["CHANGELOG.md", "docs/releases.md"]
+manifest_paths = ["package.json", "pyproject.toml", "Cargo.toml"]
+lockfile_paths = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "uv.lock", "poetry.lock", "Cargo.lock"]
+
+protected_patterns = [
+  ".github/workflows/**",
+  ".github/CODEOWNERS",
+  "CODEOWNERS",
+  ".npmrc",
+  "action.yml",
+  "scripts/release/**",
+]
+
+allowed_binary_patterns = ["docs/images/**", "assets/**", "tests/fixtures/**"]
+
+[releaseguard.review]
+minimum_independent_approvals = 1
+required_on = "high"
+allow_stale_approvals = false
+exclude_bots = true
+fail_closed = true
+allowed_author_associations = ["OWNER", "MEMBER", "COLLABORATOR"]
+trusted_reviewers = []
