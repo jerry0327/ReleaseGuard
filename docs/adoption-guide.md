@@ -1,10 +1,8 @@
 # Adoption guide
 
-ReleaseGuard should become stricter in stages. Enabling every control immediately on a mature repository can create avoidable noise and encourage unsafe blanket exceptions.
+Adopt ReleaseGuard in stages so legitimate project patterns become explicit policy rather than broad exceptions.
 
 ## Stage 1 — observe critical repository mutations
-
-Use the default repository threshold and keep review evidence disabled:
 
 ```toml
 [releaseguard]
@@ -14,95 +12,46 @@ fail_on = "critical"
 minimum_independent_approvals = 0
 ```
 
-Install-time npm execution and non-registry dependency redirection block. High, medium, and low findings remain visible.
+Install-time npm execution, non-registry npm dependencies, Python URL/VCS/path dependencies, Cargo Git/path/source overrides, and uninspectable changed TOML block by default.
 
-## Stage 2 — enforce high-risk release controls
-
-After intentional paths are represented in policy:
+## Stage 2 — enforce high-risk release surfaces
 
 ```toml
 [releaseguard]
 fail_on = "high"
 ```
 
-This blocks protected release-control changes, unexpected binaries, executable-bit introductions, release hooks, and new production dependency surface.
+This adds protected workflow/ownership changes, binaries, executable bits, build backend changes, Cargo build scripts, production dependencies, and npm provenance-policy failures.
 
-Do not solve recurring findings with broad patterns such as `"**"`. Keep allowlists narrow and document why each path is trusted.
+Keep binary and path allowlists narrow. Do not use `"**"` merely to silence recurring findings.
 
 ## Stage 3 — require independent review
 
-Grant `pull-requests: read`, pass `github-token`, then enable a quorum:
-
-```toml
-[releaseguard.review]
-minimum_independent_approvals = 1
-required_on = "high"
-allow_stale_approvals = false
-exclude_bots = true
-fail_closed = true
-allowed_author_associations = ["OWNER", "MEMBER", "COLLABORATOR"]
-```
-
-Test with a pull request that intentionally changes a protected path. Confirm that author self-approval and stale approval do not count.
+Grant `pull-requests: read`, pass `github-token`, and configure a positive quorum. Test author self-approval, stale approval after a new commit, and an authorized collaborator's fresh approval.
 
 ## Stage 4 — adopt npm trusted publishing
 
-Before adding the post-publish gate:
+Configure the exact GitHub repository and workflow as the npm trusted publisher, grant `id-token: write` only to the publishing job, remove reusable publish tokens, and publish from a protected release path.
 
-1. configure npm trusted publishing for the exact GitHub organization/user, repository, and workflow;
-2. grant `id-token: write` only to the publishing job;
-3. remove reusable npm publish tokens from that workflow;
-4. use an exact package version from `package.json`; and
-5. publish from a protected branch/tag and environment as appropriate.
+## Stage 5 — verify the published npm artifact
 
-Use current Node.js/npm versions supported by trusted publishing and provenance.
+Run `actions/verify-npm` after publication and before deployment or announcement. Keep JSON and SARIF artifacts with `if: always()` so blocked releases retain evidence.
 
-## Stage 5 — add the post-publish npm gate
+## Stage 6 — operationalize release governance
 
-Run `actions/verify-npm` after publication and before deployment, announcement, image build, or other promotion:
+Require:
 
-```yaml
-- uses: jerry0327/ReleaseGuard/actions/verify-npm@main
-  with:
-    package: ${{ steps.package.outputs.name }}
-    version: ${{ steps.package.outputs.version }}
-    repository: ${{ github.repository }}
-    workflow: .github/workflows/publish.yml
-    commit: ${{ github.sha }}
-    ref: ${{ github.ref }}
-```
-
-The default Action policy blocks every npm finding at high or critical severity. Keep the default trusted-publisher requirement unless a deliberate migration still uses token-published provenance.
-
-Registry evidence can lag publication. The Action retries six times by default. Do not replace a persistent failure with an unconditional `continue-on-error` in the promotion path.
-
-## Stage 6 — retain and optionally attest evidence
-
-Upload both JSON and SARIF with `if: always()` so blocked releases retain diagnostic evidence.
-
-A separate first-party GitHub artifact-attestation step can sign the JSON report. This signs the evidence file; it does not change the underlying npm verification result.
-
-## Platform controls
-
-ReleaseGuard is strongest alongside:
-
-- required checks;
-- protected branches and tags;
-- CODEOWNERS for workflows, Actions, policy, and release scripts;
-- protected deployment environments;
-- short-lived OIDC credentials;
-- pinned third-party Actions;
-- package ownership/MFA/recovery controls; and
-- retained release evidence.
+- ReleaseGuard and CI checks before merge;
+- CODEOWNERS review for workflows, Actions, policy, schemas, and release scripts;
+- `make check` and `make test` before tagging;
+- immutable `vX.Y.Z` tags;
+- the automated release workflow and checksums; and
+- documented handling of security-sensitive changes.
 
 ## Monorepos
 
-Repository scanning remains repository-wide. npm verification evaluates one exact package/version per invocation. Call the npm Action once per published package and pass the package-specific expected release identity.
-
-First-class monorepo package-boundary policy remains roadmap work.
+Repository scanning remains repository-wide. Root `pyproject.toml` and `Cargo.toml` are analyzed; package-specific npm verification runs once per published package. First-class package-boundary policy remains roadmap work.
 
 ## Offline and private-registry use
 
-Repository scanning is offline-capable. npm provenance verification is necessarily online and currently supports public or anonymously readable registries only.
-
-Do not inject a private registry token into `verify-npm`; v0.3 intentionally strips credentials at the subprocess boundary.
+Repository scanning is offline-capable. npm provenance verification is online and supports public or anonymously readable registries in the current release. Do not inject private registry credentials; the verifier intentionally strips them.
