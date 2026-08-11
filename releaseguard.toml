@@ -1,0 +1,30 @@
+[releaseguard]
+# Findings at or above this severity fail the action.
+fail_on = "critical"
+max_changed_files = 200
+
+changelog_paths = ["CHANGELOG.md"]
+manifest_paths = ["package.json", "pyproject.toml", "Cargo.toml"]
+lockfile_paths = [
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "uv.lock",
+  "poetry.lock",
+  "Cargo.lock",
+]
+
+# Changes here are high-scrutiny because they can alter how a release is built,
+# approved, or published.
+protected_patterns = [
+  ".github/workflows/**",
+  ".github/CODEOWNERS",
+  "CODEOWNERS",
+  ".npmrc",
+  "action.yml",
+  "scripts/release/**",
+]
+
+# Binary changes outside these paths are reported as high severity.
+allowed_binary_patterns = ["docs/**", "assets/**"]

@@ -1,0 +1,41 @@
+name: ReleaseGuard
+description: Deterministic security gate for release pull requests and release diffs
+author: ReleaseGuard contributors
+branding:
+  icon: shield
+  color: red
+inputs:
+  config:
+    description: Path to releaseguard.toml
+    required: false
+    default: releaseguard.toml
+  report-path:
+    description: Path for the JSON evidence report
+    required: false
+    default: releaseguard-report.json
+outputs:
+  decision:
+    description: PASS or BLOCK
+    value: ${{ steps.scan.outputs.decision }}
+  risk-score:
+    description: Risk score from 0 to 100
+    value: ${{ steps.scan.outputs['risk-score'] }}
+  findings:
+    description: Number of findings
+    value: ${{ steps.scan.outputs.findings }}
+  report-path:
+    description: JSON report path
+    value: ${{ steps.scan.outputs['report-path'] }}
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        RELEASEGUARD_CONFIG: ${{ inputs.config }}
+        RELEASEGUARD_REPORT: ${{ inputs.report-path }}
+      run: |
+        PYTHONPATH="$GITHUB_ACTION_PATH${PYTHONPATH:+:$PYTHONPATH}" \
+          python3 -m releaseguard scan \
+          --config "$RELEASEGUARD_CONFIG" \
+          --output "$RELEASEGUARD_REPORT"

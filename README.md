@@ -114,7 +114,7 @@ See [Policy reference](docs/policy-reference.md) for all options.
 
 ## Threat model
 
-ReleaseGuard is aimed at malicious or compromised release changes that still travel through a Git/GGitHub-based release process. It is useful when an attacker can author or merge code but the project still has an independent CI gate that must pass before publication.
+ReleaseGuard is aimed at malicious or compromised release changes that still travel through a Git/GitHub-based release process. It is useful when an attacker can author or merge code but the project still has an independent CI gate that must pass before publication.
 
 ReleaseGuard **cannot** stop an attacker who can bypass GitHub entirely and publish directly with an unrestricted registry credential. Closing that gap requires registry-side controls such as trusted publishing/OIDC, provenance, protected environments, independent approvals, and short-lived credentials. Those controls are part of the integration roadmap, not claims of the current version.
 

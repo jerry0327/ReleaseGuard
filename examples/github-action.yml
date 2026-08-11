@@ -1,0 +1,28 @@
+name: ReleaseGuard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  releaseguard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: jerry0327/ReleaseGuard@main
+        id: releaseguard
+        with:
+          config: releaseguard.toml
+          report-path: releaseguard-report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: releaseguard-evidence
+          path: releaseguard-report.json
+          if-no-files-found: ignore
