@@ -1,0 +1,197 @@
+name: ReleaseGuard npm provenance
+description: Verify a published npm package's Sigstore attestations and expected GitHub release identity
+author: ReleaseGuard contributors
+branding:
+  icon: package
+  color: red
+inputs:
+  package:
+    description: Exact npm package name, for example @scope/name
+    required: true
+  version:
+    description: Exact SemVer package version
+    required: true
+  repository:
+    description: Expected GitHub owner/repository; defaults to the current repository
+    required: false
+    default: ""
+  workflow:
+    description: Expected .github/workflows/*.yml path; defaults to the current workflow path
+    required: false
+    default: ""
+  commit:
+    description: Expected full source commit SHA; defaults to github.sha
+    required: false
+    default: ""
+  ref:
+    description: Expected refs/heads/... or refs/tags/...; defaults to github.ref
+    required: false
+    default: ""
+  builder-id:
+    description: Expected SLSA builder identity
+    required: false
+    default: https://github.com/actions/runner/github-hosted
+  registry:
+    description: HTTPS npm registry origin
+    required: false
+    default: https://registry.npmjs.org
+  fail-on:
+    description: Finding severity that blocks package promotion
+    required: false
+    default: high
+  allow-token-published-provenance:
+    description: Allow valid provenance without the npm GitHub trusted-publisher marker
+    required: false
+    default: "false"
+  attempts:
+    description: Attempts while registry metadata and attestations propagate
+    required: false
+    default: "6"
+  retry-delay:
+    description: Seconds between attempts
+    required: false
+    default: "10"
+  timeout:
+    description: Per-command timeout in seconds
+    required: false
+    default: "180"
+  npm-version:
+    description: Exact verification-capable npm CLI version
+    required: false
+    default: 11.19.0
+  report-path:
+    description: JSON evidence report path
+    required: false
+    default: releaseguard-npm-report.json
+  sarif-path:
+    description: SARIF 2.1.0 report path
+    required: false
+    default: releaseguard-npm.sarif
+outputs:
+  decision:
+    description: PASS or BLOCK
+    value: ${{ steps.verify.outputs.decision }}
+  risk-score:
+    description: Risk score from 0 to 100
+    value: ${{ steps.verify.outputs['risk-score'] }}
+  findings:
+    description: Number of findings
+    value: ${{ steps.verify.outputs.findings }}
+  cryptographic-status:
+    description: verified, missing, invalid, or unavailable
+    value: ${{ steps.verify.outputs['cryptographic-status'] }}
+  observed-repository:
+    description: Repository found in verified provenance
+    value: ${{ steps.verify.outputs['observed-repository'] }}
+  observed-workflow:
+    description: Workflow found in verified provenance
+    value: ${{ steps.verify.outputs['observed-workflow'] }}
+  observed-commit:
+    description: Commit found in verified provenance
+    value: ${{ steps.verify.outputs['observed-commit'] }}
+  report-path:
+    description: JSON evidence report path
+    value: ${{ steps.verify.outputs['report-path'] }}
+  sarif-path:
+    description: SARIF evidence report path
+    value: ${{ steps.verify.outputs['sarif-path'] }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version: "24.18.1"
+
+    - name: Install pinned npm verifier
+      shell: bash
+      env:
+        RELEASEGUARD_NPM_VERSION: ${{ inputs.npm-version }}
+      run: |
+        if [[ ! "$RELEASEGUARD_NPM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+          echo "npm-version must be an exact SemVer value" >&2
+          exit 64
+        fi
+
+        user_npmrc="${RUNNER_TEMP:-$GITHUB_ACTION_PATH}/releaseguard-verifier-user.npmrc"
+        global_npmrc="${RUNNER_TEMP:-$GITHUB_ACTION_PATH}/releaseguard-verifier-global.npmrc"
+        : > "$user_npmrc"
+        : > "$global_npmrc"
+
+        clean_env=(
+          env -i
+          "PATH=$PATH"
+          "HOME=${HOME:-${RUNNER_TEMP:-$GITHUB_ACTION_PATH}}"
+          "USERPROFILE=${USERPROFILE:-${HOME:-${RUNNER_TEMP:-$GITHUB_ACTION_PATH}}}"
+          "NPM_CONFIG_USERCONFIG=$user_npmrc"
+          "NPM_CONFIG_GLOBALCONFIG=$global_npmrc"
+        )
+        for key in HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY \
+          http_proxy https_proxy no_proxy all_proxy \
+          SSL_CERT_FILE SSL_CERT_DIR NODE_EXTRA_CA_CERTS; do
+          [[ -n "${!key:-}" ]] && clean_env+=("$key=${!key}")
+        done
+
+        "${clean_env[@]}" npm install --global \
+          --ignore-scripts \
+          --audit=false \
+          --fund=false \
+          --update-notifier=false \
+          --loglevel=error \
+          --registry=https://registry.npmjs.org \
+          "npm@$RELEASEGUARD_NPM_VERSION"
+
+        actual_version="$("${clean_env[@]}" npm --version)"
+        [[ "$actual_version" == "$RELEASEGUARD_NPM_VERSION" ]]
+
+    - id: verify
+      name: Verify npm provenance and release identity
+      shell: bash
+      env:
+        RELEASEGUARD_PACKAGE: ${{ inputs.package }}
+        RELEASEGUARD_PACKAGE_VERSION: ${{ inputs.version }}
+        RELEASEGUARD_EXPECTED_REPOSITORY: ${{ inputs.repository }}
+        RELEASEGUARD_EXPECTED_WORKFLOW: ${{ inputs.workflow }}
+        RELEASEGUARD_EXPECTED_COMMIT: ${{ inputs.commit }}
+        RELEASEGUARD_EXPECTED_REF: ${{ inputs.ref }}
+        RELEASEGUARD_EXPECTED_BUILDER: ${{ inputs.builder-id }}
+        RELEASEGUARD_REGISTRY: ${{ inputs.registry }}
+        RELEASEGUARD_FAIL_ON: ${{ inputs.fail-on }}
+        RELEASEGUARD_ALLOW_TOKEN_PROVENANCE: ${{ inputs.allow-token-published-provenance }}
+        RELEASEGUARD_ATTEMPTS: ${{ inputs.attempts }}
+        RELEASEGUARD_RETRY_DELAY: ${{ inputs.retry-delay }}
+        RELEASEGUARD_TIMEOUT: ${{ inputs.timeout }}
+        RELEASEGUARD_REPORT: ${{ inputs.report-path }}
+        RELEASEGUARD_SARIF: ${{ inputs.sarif-path }}
+      run: |
+        repository="$RELEASEGUARD_EXPECTED_REPOSITORY"
+        workflow="$RELEASEGUARD_EXPECTED_WORKFLOW"
+        commit="$RELEASEGUARD_EXPECTED_COMMIT"
+        ref="$RELEASEGUARD_EXPECTED_REF"
+
+        [[ -n "$repository" ]] || repository="$GITHUB_REPOSITORY"
+        [[ -n "$commit" ]] || commit="$GITHUB_SHA"
+        [[ -n "$ref" ]] || ref="$GITHUB_REF"
+
+        args=(
+          verify-npm "$RELEASEGUARD_PACKAGE"
+          --version "$RELEASEGUARD_PACKAGE_VERSION"
+          --repository "$repository"
+          --commit "$commit"
+          --builder-id "$RELEASEGUARD_EXPECTED_BUILDER"
+          --registry "$RELEASEGUARD_REGISTRY"
+          --fail-on "$RELEASEGUARD_FAIL_ON"
+          --attempts "$RELEASEGUARD_ATTEMPTS"
+          --retry-delay "$RELEASEGUARD_RETRY_DELAY"
+          --timeout "$RELEASEGUARD_TIMEOUT"
+          --output "$RELEASEGUARD_REPORT"
+          --sarif-output "$RELEASEGUARD_SARIF"
+        )
+        [[ -n "$workflow" ]] && args+=(--workflow "$workflow")
+        [[ -n "$ref" ]] && args+=(--ref "$ref")
+        if [[ "$RELEASEGUARD_ALLOW_TOKEN_PROVENANCE" == "true" ]]; then
+          args+=(--allow-token-published-provenance)
+        fi
+
+        launcher='import runpy, sys; root = sys.argv.pop(1); sys.path.insert(0, root); runpy.run_module("releaseguard", run_name="__main__", alter_sys=True)'
+        python3 -I -c "$launcher" "$GITHUB_ACTION_PATH/../.." "${args[@]}"

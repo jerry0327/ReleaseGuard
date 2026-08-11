@@ -48,8 +48,8 @@ runs:
         RELEASEGUARD_SARIF: ${{ inputs.sarif-path }}
         RELEASEGUARD_GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
-        PYTHONPATH="$GITHUB_ACTION_PATH${PYTHONPATH:+:$PYTHONPATH}" \
-          python3 -m releaseguard scan \
+        launcher='import runpy, sys; root = sys.argv.pop(1); sys.path.insert(0, root); runpy.run_module("releaseguard", run_name="__main__", alter_sys=True)'
+        python3 -I -c "$launcher" "$GITHUB_ACTION_PATH" scan \
           --config "$RELEASEGUARD_CONFIG" \
           --output "$RELEASEGUARD_REPORT" \
           --sarif-output "$RELEASEGUARD_SARIF"

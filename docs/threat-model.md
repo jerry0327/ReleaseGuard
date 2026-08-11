@@ -1,81 +1,101 @@
 # Threat model
 
-## Security goal
+## Security goals
 
-ReleaseGuard reduces the chance that a malicious release delta is treated as routine when an attacker has obtained enough repository access to author or merge changes.
-
-The v0.2 invariants are:
+ReleaseGuard applies three related invariants:
 
 > A release should not silently gain new execution, dependency redirection, artifact opacity, or release-control capability without explicit evidence.
 
-> When policy requires independent review, the author should not be able to satisfy that control using self-approval, stale approval, bot approval, public drive-by approval, or approval for a different commit range.
+> When policy requires independent review, the author should not satisfy that boundary using self-approval, stale approval, bot approval, untrusted public approval, or approval for another commit range.
 
-## Primary attacker
+> A published npm package should not be promoted when its cryptographically verified provenance identifies a different repository, workflow, commit, ref, or builder than the release record expects.
 
-The model assumes an attacker has compromised a maintainer account or another credential that can influence repository contents. The attacker may be able to:
+## Primary attackers
 
-- open or modify a release PR;
-- commit source changes;
-- alter package metadata;
-- add dependencies or lifecycle scripts;
-- modify CI or release workflow files;
-- attempt to hide payloads in binary artifacts;
-- self-approve using the compromised author identity; or
-- attempt to reuse approval obtained before another commit was pushed.
+### Compromised repository identity
 
-The defender still has at least one enforcement point that the attacker cannot silently bypass: a required CI job, protected branch/environment, independent reviewer, or controlled release workflow.
+An attacker controls a maintainer account or credential that can influence repository contents. They may alter package metadata, lifecycle scripts, dependencies, workflows, ownership, binaries, or review state.
 
-## High-leverage changes
+### Release-path substitution
 
-ReleaseGuard prioritizes:
+An attacker publishes the expected package/version from another source repository, workflow, commit, ref, or builder, or uses a reusable registry token when policy expects trusted publishing.
 
-1. **Install-time execution** — lifecycle hooks can run on downstream systems.
-2. **Dependency redirection** — Git, URL, file, or other non-standard sources can replace expected code.
-3. **Release-pipeline mutation** — workflow, ownership, action, or release-script changes can redefine what is built or published.
-4. **Opaque artifacts** — binary changes are harder to review than source.
-5. **New executability** — mode changes can convert inert content into executable content.
-6. **Large release deltas** — high-risk mutations are easier to conceal.
-7. **Single-identity authorization** — a compromised author should not independently satisfy a configured second-person control.
-8. **Evidence replay** — approval for one commit range should not authorize another.
+### Evidence confusion
 
-## Review-evidence trust assumptions
+An attacker attempts to make metadata presence, stale approvals, another package's verified record, an unsupported statement, or a different commit's evidence appear sufficient.
 
-ReleaseGuard relies on GitHub's representation of:
+## Defender assumptions
 
-- pull-request author and head/base SHAs;
-- reviewer login and account type;
-- review state, commit ID, and author association; and
-- token permission boundaries.
+At least one independent enforcement point remains effective, such as:
 
-These are platform assertions, not cryptographic identity proof. A compromised GitHub organization owner or repository administrator may be able to alter collaborators, workflow permissions, branch protection, trusted reviewer policy, or the required-check configuration.
+- a required ReleaseGuard check;
+- protected branch or environment;
+- independent reviewer;
+- protected trusted-publishing configuration; or
+- post-publish promotion gate.
 
-## Out of scope for v0.2
+For npm verification, the defender trusts the selected npm binary, Node.js runtime, npm registry, Sigstore trust infrastructure, GitHub Actions identity claims, TLS/network path, and runner operating system.
+
+## Controls
+
+### Repository delta
+
+ReleaseGuard surfaces install-time execution, dependency redirection, release-control mutations, opaque binary changes, new executability, and unusually large deltas.
+
+### Review authorization
+
+ReleaseGuard filters approvals by author independence, latest decisive state, commit freshness, bot status, repository trust relationship, and exact PR range.
+
+### Published npm provenance
+
+ReleaseGuard:
+
+- requires an exact package and version;
+- isolates npm from credentials and lifecycle execution;
+- delegates cryptographic validation to npm;
+- filters npm output to the target package;
+- supports explicit SLSA layouts only;
+- rejects conflicting/unsupported structures;
+- compares source and builder identity; and
+- distinguishes absent, invalid, unavailable, and mismatched evidence.
+
+## Out of scope for v0.3
 
 ReleaseGuard alone does not prevent:
 
-- direct registry publication with a stolen long-lived token;
-- compromise of GitHub, the package registry, runner image, or operating system;
-- malicious code that is semantically subtle but violates no configured invariant;
-- compromise or collusion of every trusted reviewer;
-- a project administrator disabling every required control;
-- proof that a binary was reproducibly built from reviewed source;
-- verification that a published package corresponds to the expected repository and commit; or
-- first-class dependency analysis for every package ecosystem.
+- compromise of npm, GitHub, Sigstore, TUF, transparency logs, TLS, the runner, or operating system;
+- a repository/organization administrator disabling every required control;
+- compromise or collusion of all trusted reviewers;
+- malicious source code that violates no configured invariant;
+- publication to another package name or registry that no gate monitors;
+- package takeover or account-recovery failures outside the observed release;
+- proof that arbitrary binaries are reproducibly built from reviewed source;
+- authenticated private-registry verification;
+- native verification of PyPI attestations or Cargo release provenance; or
+- native signing and verification of ReleaseGuard's own report envelope.
 
-These are not treated as solved problems.
+These are not treated as solved.
+
+## Bootstrap and verifier trust
+
+The npm composite Action pins its setup Action, Node.js version, and npm version. However, bootstrap still depends on GitHub Actions infrastructure and downloading npm from the public registry. Exact version pinning improves reproducibility but is not a self-verifying bootstrap chain.
+
+A compromised npm binary can forge its own `verified` output. ReleaseGuard therefore records the npm version and treats npm as part of the trust base rather than claiming independent cryptographic verification.
+
+## Private data and credentials
+
+The npm verifier is designed for public/anonymous artifacts. It deliberately strips credentials instead of accepting private registry tokens. Reports exclude raw DSSE bundles, certificates, transparency-log entries, package files, npm configuration, environment secrets, and review bodies.
 
 ## Defense in depth
 
 A strong deployment combines ReleaseGuard with:
 
-- protected default and release branches;
-- required checks that include ReleaseGuard;
-- CODEOWNERS review for workflow, action, policy, and release-script paths;
-- protected deployment environments;
-- short-lived OIDC/trusted-publishing credentials;
-- registry provenance or attestations;
-- registry-side MFA and recovery controls;
-- pinned third-party Actions; and
-- reproducible or isolated release builds where practical.
-
-Future versions will verify more of the registry and provenance evidence directly.
+- protected branches and release environments;
+- required checks and CODEOWNERS review;
+- npm trusted publishing with short-lived OIDC credentials;
+- restricted package ownership/recovery controls;
+- pinned Actions and reviewed updates;
+- retained JSON/SARIF evidence;
+- artifact/report attestations where useful;
+- isolated release builds; and
+- reproducible-build verification where practical.

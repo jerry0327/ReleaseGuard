@@ -1,32 +1,60 @@
-# JSON evidence schema
+# JSON evidence schemas
 
-ReleaseGuard v0.2 writes report schema version `2`.
+ReleaseGuard writes separate reports for separate trust boundaries.
 
-The canonical machine-readable schema is [`schemas/releaseguard-report.schema.json`](../schemas/releaseguard-report.schema.json).
+## Repository scan report
+
+`releaseguard scan` writes repository report schema version `2`.
+
+Canonical schema: [`schemas/releaseguard-report.schema.json`](../schemas/releaseguard-report.schema.json)
+
+Top-level fields include:
+
+- tool version;
+- scanned base/head SHAs;
+- decision, score, threshold, and changed-file count;
+- deterministic findings; and
+- optional GitHub review evidence.
+
+Review-evidence status values:
+
+- `not_required`
+- `passed`
+- `failed`
+- `unavailable`
+- `mismatch`
+
+## npm provenance report
+
+`releaseguard verify-npm` writes npm provenance schema version `1`.
+
+Canonical schema: [`schemas/npm-provenance-report.schema.json`](../schemas/npm-provenance-report.schema.json)
+
+Top-level fields include:
+
+- exact package/registry identity;
+- expected repository/workflow/commit/ref/builder identity;
+- decision, score, and threshold;
+- npm provenance findings; and
+- normalized cryptographic-verifier evidence.
+
+See [npm provenance report](npm-provenance-report.md) for field semantics and deliberately excluded data.
 
 ## Compatibility policy before 1.0
 
-- `schema_version` changes when a consumer-breaking report shape is introduced.
-- New optional fields can be added without changing the schema version.
-- Stable rule IDs are retained unless a rule's security meaning is replaced rather than refined.
-- Consumers should ignore unknown object properties and unknown rule IDs.
+- A consumer-breaking shape change increments the relevant `schema_version`.
+- Additive optional fields can be introduced without an increment.
+- Consumers should ignore unknown properties and unknown rule IDs.
+- Rule IDs remain stable unless the security meaning is replaced rather than refined.
+- Repository and npm schemas can evolve independently.
 
-## Top-level fields
+## SARIF compatibility
 
-- `schema_version`
-- `tool.name` and `tool.version`
-- `base` and `head` full commit SHAs
-- `decision`
-- `risk_score`
-- `fail_on`
-- `changed_files`
-- `findings[]`
-- `review_evidence` when evaluated
+SARIF output is presentation/interoperability evidence and does not replace the JSON report or determine the exit code.
 
-## Review-evidence status
+Fingerprint namespaces:
 
-- `not_required` — review policy disabled or no deterministic finding reached the trigger.
-- `passed` — enough approvals counted.
-- `failed` — evidence was available, but quorum was not met.
-- `unavailable` — required evidence could not be obtained or parsed.
-- `mismatch` — scanned commit range did not match pull-request context.
+- repository scan: `releaseguard/v1`
+- npm provenance: `releaseguard/npm-v1`
+
+An intentional identity break requires a new namespace and changelog entry.

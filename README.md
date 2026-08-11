@@ -1,23 +1,37 @@
 # ReleaseGuard
 
-**A deterministic security gate for software releases.**
+[![CI](https://github.com/jerry0327/ReleaseGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry0327/ReleaseGuard/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-ReleaseGuard inspects the *release delta* before publication and turns high-leverage supply-chain changes into explicit policy evidence. It detects install-time execution, dependency redirection, release-workflow mutations, opaque binaries, executable-bit changes, and other release-control risks. When enabled, it also verifies that high-risk changes have fresh, independent approvals bound to the exact pull-request commit.
+**A deterministic security gate for source changes, release authorization, and published package provenance.**
 
-> **Status:** early alpha (`0.2.0`). The local policy engine, GitHub Action, review-evidence gate, JSON report, and SARIF output are usable. Registry provenance verification remains roadmap work.
+ReleaseGuard evaluates a release at two different trust boundaries:
+
+1. **Before merge or publication** — inspect the Git delta for install-time execution, dependency redirection, release-workflow mutations, opaque binaries, executable-bit changes, and other high-leverage supply-chain signals.
+2. **After npm publication** — ask the npm CLI to cryptographically verify the package's Sigstore attestations, then compare the signed SLSA claims with the expected GitHub repository, workflow, commit, ref, and builder.
+
+> **Status:** early alpha (`0.3.0`). The repository scanner, independent-review gate, npm provenance verifier, JSON evidence, SARIF output, and composite Actions are usable. Pin ReleaseGuard and all third-party Actions to reviewed commit SHAs in production.
+
+ReleaseGuard does not use an LLM as the enforcement root of trust.
 
 ## Why ReleaseGuard exists
 
-A compromised maintainer account can make a malicious release look operationally normal: alter a publish workflow, add a lifecycle hook, redirect a dependency, conceal code in a binary, or merge a release PR using only the compromised identity.
+A compromised maintainer identity can make malicious release activity look routine:
 
-Traditional review often treats those mutations as ordinary files inside a large diff. ReleaseGuard instead asks two narrower questions:
+- add an npm `postinstall` hook;
+- redirect a dependency to a Git or URL source;
+- alter a publish workflow or ownership rule;
+- conceal content in a checked-in binary;
+- approve a high-risk PR using the same compromised identity; or
+- publish a package version from a different repository, workflow, or commit than the release record expects.
 
-1. **Did this release gain new execution, dependency redirection, opacity, or release-control capability?**
-2. **When policy requires it, did a trusted reviewer other than the author approve this exact head commit?**
+ReleaseGuard turns those mutations and identity mismatches into stable, reviewable policy findings.
 
-ReleaseGuard remains deterministic: no external model is required to pass or block a release.
+## Capabilities
 
-## What v0.2 checks
+### Repository release gate
+
+The root Action and `releaseguard scan` command evaluate repository changes.
 
 | Rule | Signal | Default severity |
 |---|---|---:|
@@ -36,13 +50,27 @@ ReleaseGuard remains deterministic: no external model is required to pass or blo
 | `RG013` | Required review evidence unavailable | Critical/High |
 | `RG014` | Review evidence is bound to another commit range | **Critical** |
 
-By default, only **critical** findings block. Independent-review enforcement is initially disabled until a project explicitly sets a non-zero quorum.
+### Published npm provenance gate
 
-See [Rules and rationale](docs/rules.md) for detailed semantics and expected false positives.
+The `actions/verify-npm` Action and `releaseguard verify-npm` command evaluate an exact registry artifact.
 
-## GitHub Action quick start
+| Rule | Signal | Default severity |
+|---|---|---:|
+| `RG015` | Package version has no advertised npm provenance | High |
+| `RG016` | npm rejected the target signature or attestation | **Critical** |
+| `RG017` | Required cryptographic verifier is unavailable | **Critical** |
+| `RG018` | Expected GitHub trusted-publisher marker is missing | High |
+| `RG019` | Verified provenance names another repository | **Critical** |
+| `RG020` | Verified provenance names another workflow | **Critical** |
+| `RG021` | Verified provenance names another source commit | **Critical** |
+| `RG022` | Verified provenance names another branch or tag ref | High |
+| `RG023` | Verified provenance names another builder | **Critical** |
+| `RG024` | Verified attestation structure is malformed or unsupported | **Critical** |
+| `RG025` | Registry publish/release attestation is missing | High |
 
-ReleaseGuard needs full Git history to compare the pull-request base and head commits. `pull-requests: read` is only used when review evidence is enabled.
+See [Rules and rationale](docs/rules.md) for exact semantics.
+
+## Pull-request gate quick start
 
 ```yaml
 name: release-guard
@@ -64,7 +92,6 @@ jobs:
 
       # Alpha usage. Pin ReleaseGuard to a reviewed commit SHA in production.
       - uses: jerry0327/ReleaseGuard@main
-        id: releaseguard
         with:
           config: releaseguard.toml
           github-token: ${{ github.token }}
@@ -78,17 +105,7 @@ jobs:
             releaseguard.sarif
 ```
 
-The action outputs:
-
-- `decision`: `PASS` or `BLOCK`;
-- `risk-score`: `0`–`100`, with severity-preserving score bands;
-- `findings`: total finding count;
-- `report-path`: JSON evidence path; and
-- `sarif-path`: SARIF 2.1.0 path.
-
-## Enable independent-review enforcement
-
-Start with review evidence disabled, then enable it after the workflow has `pull-requests: read` permission and the token is passed to the action.
+Independent review is opt-in:
 
 ```toml
 [releaseguard.review]
@@ -101,123 +118,134 @@ allowed_author_associations = ["OWNER", "MEMBER", "COLLABORATOR"]
 trusted_reviewers = []
 ```
 
-An approval counts only when all applicable conditions are met:
-
-- the reviewer is not the pull-request author;
-- the latest decisive review from that reviewer is `APPROVED`;
-- the review targets the scanned head commit, unless stale approvals were explicitly allowed;
-- the reviewer is not a bot when bot exclusion is enabled; and
-- the reviewer has an allowed GitHub author association or is explicitly listed in `trusted_reviewers`.
-
-Comments do not erase an earlier approval, but a later `CHANGES_REQUESTED` or dismissed review does. ReleaseGuard also binds the scanned base/head range to the pull-request context before accepting approvals.
-
 Read [Independent review evidence](docs/review-evidence.md) before enabling a blocking quorum.
+
+## npm post-publish gate quick start
+
+Run this after `npm publish` in the same trusted-publishing workflow:
+
+```yaml
+- uses: jerry0327/ReleaseGuard/actions/verify-npm@main
+  with:
+    package: ${{ steps.package.outputs.name }}
+    version: ${{ steps.package.outputs.version }}
+    repository: ${{ github.repository }}
+    workflow: .github/workflows/publish.yml
+    commit: ${{ github.sha }}
+    ref: ${{ github.ref }}
+```
+
+The npm Action:
+
+- provisions pinned Node.js `24.18.1` and npm `11.19.0`;
+- retries while new registry metadata propagates;
+- installs the exact package in a temporary sandbox with lifecycle scripts and bin links disabled;
+- uses an allowlisted verifier environment that excludes inherited GitHub, npm, Node, cloud, and other credentials;
+- runs `npm audit signatures --json --include-attestations`;
+- accepts claims only from the target package's cryptographically verified bundles;
+- supports SLSA provenance v1 and legacy v0.2 claim layouts;
+- compares repository, workflow, commit, optional ref, and builder identity; and
+- emits a compact report without retaining raw Sigstore bundles or review discussion content.
+
+A complete publish example is in [`examples/npm-post-publish.yml`](examples/npm-post-publish.yml).
+
+### Action inputs that matter most
+
+| Input | Default | Meaning |
+|---|---|---|
+| `package` | required | Exact package name |
+| `version` | required | Exact SemVer version; tags and ranges are rejected |
+| `repository` | current repository | Expected GitHub `owner/name` |
+| `workflow` | current workflow path | Expected `.github/workflows/*.yml` |
+| `commit` | `github.sha` | Expected full source SHA |
+| `ref` | `github.ref` | Expected branch or tag ref |
+| `builder-id` | GitHub-hosted runner | Expected SLSA builder |
+| `fail-on` | `high` | Blocking severity |
+| `attempts` | `6` | Registry propagation attempts |
+| `npm-version` | `11.19.0` | Exact verifier version |
+
+The default policy requires the npm GitHub trusted-publisher marker. Set `allow-token-published-provenance: true` only when a deliberate migration period still permits token-published provenance.
 
 ## CLI
 
-ReleaseGuard has no third-party runtime dependency on Python 3.11+.
+ReleaseGuard has no third-party Python runtime dependency and requires Python 3.11+.
 
 ```bash
 python -m pip install -e .
 releaseguard scan --base origin/main --head HEAD
 ```
 
-For a GitHub pull-request scan with review evidence, keep the token in an environment variable rather than a command-line argument:
+Verify a published npm version:
 
 ```bash
-export RELEASEGUARD_GITHUB_TOKEN="..."
-releaseguard scan \
-  --base <base-sha> \
-  --head <head-sha> \
+releaseguard verify-npm @scope/package \
+  --version 1.2.3 \
   --repository owner/repository \
-  --pull-request 123
+  --workflow .github/workflows/publish.yml \
+  --commit 0123456789abcdef0123456789abcdef01234567 \
+  --ref refs/tags/v1.2.3
 ```
+
+`verify-npm` requires npm `11.12.0` or newer because it consumes the full verified Sigstore bundles returned by `--include-attestations`. The bundled Action pins npm `11.19.0`.
 
 Exit codes:
 
 - `0`: policy passed;
-- `2`: policy completed and blocked the release;
-- `3`: ReleaseGuard could not complete the scan.
+- `2`: policy completed and blocked release promotion;
+- `3`: command input or ReleaseGuard execution failed before a policy report could be completed.
 
-## Policy configuration
-
-A minimal `releaseguard.toml`:
-
-```toml
-[releaseguard]
-fail_on = "critical"
-max_changed_files = 200
-changelog_paths = ["CHANGELOG.md"]
-protected_patterns = [
-  ".github/workflows/**",
-  ".github/CODEOWNERS",
-  "CODEOWNERS",
-  ".npmrc",
-  "action.yml",
-  "scripts/release/**",
-]
-allowed_binary_patterns = ["docs/**", "assets/**"]
-
-[releaseguard.review]
-minimum_independent_approvals = 0
-required_on = "high"
-```
-
-See the complete [Policy reference](docs/policy-reference.md) and the staged [Adoption guide](docs/adoption-guide.md).
+Registry/network/verifier failures that occur inside npm verification are normally represented by critical `RG017` evidence and exit code `2`, not silently ignored.
 
 ## Evidence formats
 
-### JSON
+### Repository scan
 
-`releaseguard-report.json` is the durable policy record. Schema version 2 includes:
+- `releaseguard-report.json` — schema version 2
+- `releaseguard.sarif` — SARIF 2.1.0
+- JSON Schema: [`schemas/releaseguard-report.schema.json`](schemas/releaseguard-report.schema.json)
 
-- tool version and scanned commit range;
-- decision, score, threshold, and changed-file count;
-- stable rule IDs, severity, path, evidence, and remediation; and
-- review-evidence status, counted approvals, excluded approvals, and commit binding.
+### npm provenance verification
 
-A JSON Schema is provided at [`schemas/releaseguard-report.schema.json`](schemas/releaseguard-report.schema.json).
+- `releaseguard-npm-report.json` — npm provenance schema version 1
+- `releaseguard-npm.sarif` — SARIF 2.1.0 with package PURL locations
+- JSON Schema: [`schemas/npm-provenance-report.schema.json`](schemas/npm-provenance-report.schema.json)
 
-### SARIF
+The npm report records normalized claims and verification status, not raw DSSE envelopes, certificates, transparency-log entries, auth tokens, or package contents.
 
-`releaseguard.sarif` uses SARIF 2.1.0 with stable fingerprints so results can be retained as an artifact or uploaded to GitHub code scanning. Upload is opt-in because it requires `security-events: write` and availability differs by repository type.
-
-See [SARIF integration](docs/sarif.md).
+A project can optionally attest the ReleaseGuard report itself with GitHub's first-party artifact attestation Action; see [`examples/npm-post-publish-with-attested-evidence.yml`](examples/npm-post-publish-with-attested-evidence.yml).
 
 ## Security boundary
 
-ReleaseGuard is aimed at malicious or compromised changes that still travel through a Git/GitHub-based release process. It is useful when an attacker can author or merge code but at least one independent CI, review, or protected-release control remains enforceable.
+ReleaseGuard verifies repository evidence and selected registry evidence, but it is not the package registry, GitHub, Sigstore, or the CI runner.
 
-ReleaseGuard **cannot** stop an attacker who can bypass GitHub and publish directly with an unrestricted registry credential. It also does not prove that an arbitrary binary was reproducibly built from reviewed source. Closing those gaps requires trusted publishing/OIDC, provenance and attestations, protected environments, short-lived credentials, and reproducible builds.
+For npm packages, ReleaseGuard delegates cryptographic signature, certificate-chain, transparency-log, and artifact-subject verification to the official npm CLI. It then applies deterministic identity policy to the statements returned as verified. It does **not** claim that merely decoding `dist.attestations` proves provenance.
 
-Read the full [Threat model](docs/threat-model.md).
+ReleaseGuard cannot prevent:
 
-## Architecture and design principles
+- compromise of npm, GitHub, Sigstore, the runner image, or the operating system;
+- an administrator disabling every required workflow or repository rule;
+- collusion or compromise of every trusted reviewer;
+- malicious source code that violates no configured release invariant;
+- publication to an unmonitored package name or registry; or
+- proof that every arbitrary binary was reproducibly built from reviewed source.
 
-- **Deterministic first.** No external model or hosted ReleaseGuard service is required.
-- **Bind evidence to commits.** Review evidence is rejected when it describes a different range.
-- **Do not trust public approval by default.** Reviewer association or explicit trust is required.
-- **Explain every finding.** Stable IDs, paths, details, and remediation are preserved.
-- **Evidence is an artifact.** JSON and SARIF can be retained with release records.
-- **Secure the security tooling.** ReleaseGuard's own Actions are pinned to full commit SHAs and monitored by Dependabot.
+Read [npm provenance verification](docs/npm-provenance.md) and the full [Threat model](docs/threat-model.md).
 
-See [Architecture](docs/architecture.md).
+## Design principles
 
-## Roadmap
+- **Deterministic enforcement.** An external model is never required for PASS/BLOCK.
+- **Separate pre-release and post-publish boundaries.** Git review evidence and registry artifact evidence are not conflated.
+- **Delegate cryptography to maintained ecosystem tooling.** ReleaseGuard does not implement a partial Sigstore verifier in Python.
+- **Bind authorization and provenance to exact commits.** Stale or mismatched identities are rejected.
+- **Keep evidence narrow.** Reports retain normalized claims rather than secrets or large raw bundles.
+- **Fail closed when verification is required.** Missing or unavailable evidence cannot become an accidental pass.
+- **Secure the security tooling.** Project workflows pin third-party Actions and Dependabot monitors updates.
 
-The next major work is registry identity and provenance:
-
-1. npm trusted-publishing / OIDC verification;
-2. published provenance validation against repository, workflow, and commit;
-3. signed ReleaseGuard evidence envelopes;
-4. first-class PyPI and Cargo dependency rules; and
-5. policy baselines and time-bounded exceptions for mature repositories.
-
-See [ROADMAP.md](ROADMAP.md).
+See [Architecture](docs/architecture.md), [Adoption guide](docs/adoption-guide.md), and [Roadmap](ROADMAP.md).
 
 ## Contributing and security reports
 
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Security-sensitive reports must follow [SECURITY.md](SECURITY.md) rather than a public issue.
+Issues and focused pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Security-sensitive reports must follow [SECURITY.md](SECURITY.md), not a public issue.
 
 ## License
 
