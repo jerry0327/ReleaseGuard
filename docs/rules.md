@@ -1,169 +1,77 @@
 # Rules and rationale
 
-ReleaseGuard rule IDs are intended to remain stable. Severity or wording can evolve before 1.0, but incompatible semantic changes are documented in the changelog.
-
-## Repository-delta rules
-
-### RG001 — Release-control file changed
-
-**Severity:** High
-
-Matches configured `protected_patterns`, including workflows, CODEOWNERS, action metadata, `.npmrc`, and release scripts. These files can redefine who approves a release, what executes in CI, or where a package is published.
-
-**Expected false positives:** routine CI maintenance. The change still deserves independent scrutiny; broad suppression is discouraged.
-
-### RG002 — Unexpected binary content changed
-
-**Severity:** High
-
-Git marks a changed path as binary outside `allowed_binary_patterns`. Binary diffs are materially harder to review and can conceal executable content.
-
-### RG003 — Executable bit introduced
-
-**Severity:** High
-
-A changed file gains executable mode. This can turn reviewed inert content into directly executable content.
-
-### RG004 — npm install lifecycle hook changed
-
-**Severity:** Critical
-
-A new or changed `preinstall`, `install`, or `postinstall` script can execute automatically on downstream systems during package installation.
-
-### RG005 — npm release lifecycle hook changed
-
-**Severity:** High
-
-A changed `prepare`, `prepublish`, or `prepublishOnly` hook can alter the package around publish time.
-
-### RG006 — Non-registry dependency source introduced
-
-**Severity:** Critical
-
-A dependency changes to Git, URL, file, link, GitHub, GitLab, or Bitbucket syntax. This bypasses the expected registry version model and can redirect code resolution.
-
-### RG007 — New direct dependency introduced
-
-**Severity:** High for production-facing sections; Medium for `devDependencies`
-
-A new direct dependency expands the release or build trust surface.
-
-### RG008 — Non-conventional package version
-
-**Severity:** Low
-
-The npm version changed to a value outside conventional SemVer syntax. Some projects intentionally use another scheme.
-
-### RG009 — Version changed without changelog update
-
-**Severity:** Medium
-
-The package version changed while no configured changelog path changed.
-
-### RG010 — Manifest changed without lockfile update
-
-**Severity:** Low
-
-A configured manifest changed but no configured lockfile changed. This is generic; ecosystem-specific consistency checks remain roadmap work.
-
-### RG011 — Release delta unusually large
-
-**Severity:** Medium
-
-The number of changed files exceeds `max_changed_files`. Large deltas can hide small high-leverage changes and reduce review quality.
-
-## Review-evidence rules
-
-### RG012 — Independent review quorum not met
-
-**Severity:** Critical
-
-The review gate was triggered, but the number of fresh, independent, trusted approvals was below policy. Evidence includes excluded stale, self, bot, and untrusted approvals plus active changes-requested states.
-
-### RG013 — Required review evidence unavailable
-
-**Severity:** Critical when `fail_closed = true`; otherwise High
-
-The gate required GitHub evidence, but repository/PR context, token permission, API availability, or expected response data was unavailable.
-
-### RG014 — Review evidence bound to another commit range
-
-**Severity:** Critical
-
-The scanned range does not match the pull-request event/API range. Review evidence is rejected instead of being reused across the mismatch.
-
-## Published npm provenance rules
-
-### RG015 — npm provenance missing
-
-**Severity:** High
-
-The exact package version's registry metadata does not advertise an attestation endpoint. No cryptographic provenance evaluation can proceed.
-
-**Expected transient case:** newly published metadata may not have propagated. The npm Action retries by default.
-
-### RG016 — npm attestation verification failed
-
-**Severity:** Critical
-
-The official npm verifier rejected the target package's registry signature, Sigstore attestation, certificate/log evidence, or package subject. A target package that is absent from npm's verified result is also rejected.
-
-### RG017 — npm cryptographic verifier unavailable
-
-**Severity:** Critical
-
-ReleaseGuard could not obtain a supported npm verifier result because npm is missing/too old, the registry/network is unavailable, the command timed out, or expected JSON could not be obtained safely.
-
-This is a policy finding rather than an accidental pass.
-
-### RG018 — npm trusted publisher missing
-
-**Severity:** High
-
-Policy requires GitHub trusted publishing, but registry metadata does not contain both `trustedPublisher.id = "github"` and a non-empty OIDC configuration ID.
-
-Valid provenance can exist without this marker during token-based publication; use the explicit migration option only when that weaker credential model is intentional.
-
-### RG019 — npm provenance repository mismatch
-
-**Severity:** Critical
-
-The cryptographically verified SLSA statement identifies a different GitHub repository, or no supported repository identity.
-
-### RG020 — npm provenance workflow mismatch
-
-**Severity:** Critical
-
-The verified statement identifies another workflow path or omits a supported workflow identity.
-
-### RG021 — npm provenance commit mismatch
-
-**Severity:** Critical
-
-The verified statement identifies another source commit or omits a canonical commit claim.
-
-### RG022 — npm provenance ref mismatch
-
-**Severity:** High
-
-The verified statement identifies another branch/tag ref or omits the ref while the caller constrained one.
-
-### RG023 — npm provenance builder mismatch
-
-**Severity:** Critical
-
-The verified statement names another SLSA builder identity. The default is GitHub's hosted runner builder.
-
-### RG024 — npm attestation metadata malformed or unsupported
-
-**Severity:** Critical
-
-npm cryptographically accepted the bundle, but ReleaseGuard cannot safely interpret its in-toto/SLSA structure. Examples include malformed DSSE JSON, conflicting provenance identities, unsupported statement type, unexpected package subject, or non-canonical SHA-512 subject digest.
-
-This fail-closed behavior prevents a new or ambiguous schema from being silently interpreted as the old one.
-
-### RG025 — npm registry publish/release attestation missing
-
-**Severity:** High
-
-The verified bundle contains build provenance but no recognized npm publish attestation or in-toto release attestation. This reduces evidence that the registry accepted the specific artifact as a publication event.
+ReleaseGuard rule IDs are stable identifiers. Before 1.0, wording and severity may be refined, but an incompatible semantic replacement requires documentation and versioning.
+
+## Repository and npm-manifest rules
+
+| Rule | Severity | Meaning |
+|---|---:|---|
+| `RG001` | High | Release-control, ownership, workflow, Action, or publish configuration changed |
+| `RG002` | High | Unexpected binary content changed outside configured allowed paths |
+| `RG003` | High | A file gained executable mode |
+| `RG004` | Critical | npm `preinstall`, `install`, or `postinstall` changed |
+| `RG005` | High | npm prepare/publish lifecycle hook changed |
+| `RG006` | Critical | npm dependency changed to Git, URL, file, or link source |
+| `RG007` | High/Medium | New direct npm dependency introduced |
+| `RG008` | Low | npm version is not conventional SemVer |
+| `RG009` | Medium | Version changed without configured changelog update |
+| `RG010` | Low | Manifest changed without a configured lockfile change |
+| `RG011` | Medium | Release delta exceeds configured changed-file limit |
+
+## Review authorization
+
+| Rule | Severity | Meaning |
+|---|---:|---|
+| `RG012` | Critical | Fresh independent-review quorum was not met |
+| `RG013` | Critical/High | Required GitHub review evidence was unavailable |
+| `RG014` | Critical | Review evidence and scanned commit range do not match |
+
+## Published npm provenance
+
+| Rule | Severity | Meaning |
+|---|---:|---|
+| `RG015` | High | Exact npm version does not advertise provenance |
+| `RG016` | Critical | npm rejected the target registry signature or attestation |
+| `RG017` | Critical | Required npm cryptographic verifier was unavailable |
+| `RG018` | High | Expected GitHub trusted-publisher marker is missing or incomplete |
+| `RG019` | Critical | Verified provenance names another repository |
+| `RG020` | Critical | Verified provenance names another workflow |
+| `RG021` | Critical | Verified provenance names another source commit |
+| `RG022` | High | Verified provenance names another branch or tag ref |
+| `RG023` | Critical | Verified provenance names another builder |
+| `RG024` | Critical | Verified statement is malformed, conflicting, or unsupported |
+| `RG025` | High | Recognized registry publish/release attestation is missing |
+
+## Python packaging
+
+| Rule | Severity | Meaning |
+|---|---:|---|
+| `RG026` | Critical | PEP 508, Poetry, or build requirement now uses a URL, VCS, or local path |
+| `RG027` | High/Medium | New direct Python runtime or optional/development dependency introduced |
+| `RG028` | High | Python build backend or build requirement changed |
+| `RG029` | Medium | Dependency fields became dynamically supplied by a backend |
+
+`RG026` is emitted for direct-source changes even when the dependency already existed. `RG027` is limited to newly introduced names. Optional, documentation, test, and development groups use medium severity by default.
+
+## Cargo packaging
+
+| Rule | Severity | Meaning |
+|---|---:|---|
+| `RG030` | Critical | Cargo dependency now uses Git or a local path |
+| `RG031` | High/Medium | New Cargo dependency introduced across runtime, dev, build, workspace, or target sections |
+| `RG032` | High | `build.rs`, `package.build`, or native `links` execution metadata changed |
+| `RG033` | Critical | Custom registry, `[patch]`, or `[replace]` source override introduced |
+| `RG034` | Critical | Changed Python/Cargo TOML could not be parsed, preventing safe inspection |
+
+Cargo development dependencies use medium severity. Build dependencies remain high because they execute inside the release/build trust boundary.
+
+## False-positive strategy
+
+ReleaseGuard intentionally reports high-leverage changes that are often legitimate. The expected response is review and documented policy—not broad suppression. Allow patterns should remain narrow, and a project should preserve evidence explaining why a binary path, source override, dynamic dependency source, or build script is trusted.
+
+## Severity model
+
+- **Critical** — direct execution, source redirection, identity mismatch, cryptographic rejection, or inability to inspect an explicitly supported security boundary.
+- **High** — release-control, build-time execution, opaque artifact, production dependency, or required-evidence risk.
+- **Medium** — optional/development dependency or release-consistency signal requiring deliberate review.
+- **Low** — hygiene or consistency signal with substantial legitimate project variation.

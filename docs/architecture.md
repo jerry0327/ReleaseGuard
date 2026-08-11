@@ -1,116 +1,72 @@
 # Architecture
 
-ReleaseGuard separates pre-release repository analysis from post-publish registry verification.
+ReleaseGuard separates pre-release repository analysis, review authorization, and post-publish registry verification.
 
 ```text
-PRE-RELEASE
-
-Git history / GitHub event
-          |
-          v
-   commit range resolver
-          |
-          v
-     git delta reader
-          |
-          +---- paths / modes / binary markers
-          |
-          v
- deterministic rule engine <---- releaseguard.toml
-          |
-          +---- high-risk trigger? ---- no ----+
-          |                                    |
-         yes                                   |
-          |                                    |
-          v                                    |
- GitHub PR + review evidence                    |
-          |                                    |
-          +---- range binding / trust filter --+
-                                               |
-                                               v
-                                           ScanResult
-                                         /      |      \
-                                        v       v       v
-                                  JSON evidence SARIF  job summary
-
-POST-PUBLISH
+Git range
+   |
+   v
+path / mode / binary delta
+   |
+   +--> generic + npm rules
+   +--> pyproject.toml / Poetry rules
+   +--> Cargo.toml / build.rs rules
+   |
+   v
+review trigger ----> GitHub PR/review evidence ----> exact commit binding
+   |                                                   |
+   +---------------------------------------------------+
+                           |
+                           v
+                  JSON / SARIF / PASS-BLOCK
 
 exact npm package@version
-          |
-          v
- validated registry metadata
-          |
-          v
- isolated credential-free npm sandbox
-          |
-          v
- official npm signature/attestation verifier
-          |
-          v
- verified target-package DSSE statements
-          |
-          v
- SLSA claim normalization + identity policy
-          |
-          v
-                                  NpmVerificationResult
-                                         /      |      \
-                                        v       v       v
-                                  JSON evidence SARIF  job summary
+   |
+   v
+isolated credential-free npm sandbox
+   |
+   v
+npm cryptographic verifier
+   |
+   v
+verified target-package statements
+   |
+   v
+SLSA claim normalization and expected identity policy
+   |
+   v
+npm JSON / SARIF / PASS-BLOCK
 ```
 
-## Modules
+## Core modules
 
-- `releaseguard/git.py` — resolves ranges and extracts changed paths, binary markers, and modes.
-- `releaseguard/config.py` — parses repository/review TOML policy using the standard library.
-- `releaseguard/rules.py` — deterministic repository and package-manifest rules.
-- `releaseguard/github_evidence.py` — GitHub PR context, review trust filtering, and range binding.
-- `releaseguard/npm_runtime.py` — exact input validation, credential-free npm environment, bounded subprocess execution, and registry metadata normalization.
-- `releaseguard/npm_attestations.py` — verified DSSE decoding plus SLSA v1/v0.2 claim normalization.
-- `releaseguard/npm_results.py` — stable npm findings, evidence assembly, and unavailable-verifier results.
-- `releaseguard/npm_provenance.py` — post-publish verification orchestration and expected-identity policy.
-- `releaseguard/models.py` — finding, scan, review, npm evidence, and result structures.
-- `releaseguard/report.py` — JSON and human-readable summaries.
-- `releaseguard/sarif.py` — repository and npm SARIF 2.1.0 output with separately versioned fingerprints.
-- `releaseguard/cli.py` — CLI and composite-Action integration boundary.
+- `releaseguard/git.py` — Git range, path, binary, and mode extraction.
+- `releaseguard/rules.py` — rule orchestration and npm manifest rules.
+- `releaseguard/ecosystems.py` — dependency-free TOML analysis for PEP 621, Poetry, and Cargo.
+- `releaseguard/github_evidence.py` — pull-request context, trusted review filtering, and commit binding.
+- `releaseguard/npm_runtime.py` — exact npm input validation, bounded subprocess execution, and credential-isolated environment.
+- `releaseguard/npm_attestations.py` — verified DSSE decoding and SLSA v1/v0.2 normalization.
+- `releaseguard/npm_policy.py` — expected repository, workflow, commit, ref, builder, subject, and publisher policy.
+- `releaseguard/models.py` — stable evidence and result structures.
+- `releaseguard/report.py` and `releaseguard/sarif.py` — durable JSON, summaries, and SARIF.
+- `scripts/release_check.py` — version, governance-file, tag, and external-Action pin validation.
 
-## Network boundaries
+## Parser boundary
 
-### Repository scan
+Python's standard-library `tomllib` parses supported package manifests. A changed `pyproject.toml` or `Cargo.toml` that cannot be parsed produces critical `RG034`; ReleaseGuard does not silently skip ecosystem analysis.
 
-The deterministic Git scan requires no network. GitHub API access occurs only when a positive review quorum is configured and a finding reaches its review trigger.
+Dependency records are normalized by section and canonical package name. Existing registry-version changes are not treated as new dependencies, while changes to direct URL/VCS/path sources remain critical.
 
-### npm verification
+## Network boundary
 
-`verify-npm` requires registry, Sigstore/TUF, and transparency-log access through npm. It does not perform direct unauthenticated Sigstore verification in Python.
+Repository scanning is offline. GitHub API access occurs only when independent review is configured and triggered. npm verification requires registry and Sigstore-related access through the official npm CLI.
 
-The npm subprocess receives an allowlisted environment containing process discovery, locale, proxy, and certificate settings. Credentials, arbitrary Node options, inherited npm configuration, and caller HOME/cache state are excluded.
+## Trust boundary
 
-## Cryptographic boundary
+ReleaseGuard does not implement a partial cryptographic verifier. npm remains responsible for registry signatures, certificate chains, transparency-log evidence, package subject, and digest verification. ReleaseGuard accepts claims only from target-package evidence npm reports as verified.
 
-npm is responsible for validating:
+GitHub review metadata and package-manager manifests are platform/project assertions, not proof that source code is benign.
 
-- registry signatures and keys;
-- Sigstore bundles;
-- signing certificate chains;
-- transparency-log evidence;
-- package PURL subject; and
-- package SHA-512 subject digest.
+## Release boundary
 
-ReleaseGuard accepts source claims only from the target package records npm returns as verified. It then independently checks supported statement structure, canonical subject form, and expected release identity.
-
-This avoids two unsafe extremes:
-
-- treating registry JSON presence as proof; and
-- implementing a partial, divergent cryptographic verifier in a dependency-free Python project.
-
-## Evidence boundary
-
-Repository scan and npm provenance reports use different schemas because they represent different evidence objects.
-
-- repository report: schema version 2
-- npm provenance report: schema version 1
-- repository SARIF fingerprint: `releaseguard/v1`
-- npm SARIF fingerprint: `releaseguard/npm-v1`
-
-Raw review discussion and raw cryptographic bundles are excluded from durable reports. Optional report signing can be performed by a separate first-party GitHub artifact-attestation step.
+A release is valid only when version metadata, changelog, governance files, and executable Action pins pass `scripts/release_check.py`. A pushed immutable `vX.Y.Z` tag is rechecked before GitHub Release artifacts and checksums are created.
