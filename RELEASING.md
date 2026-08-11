@@ -10,9 +10,28 @@ ReleaseGuard releases are evidence-bearing maintenance events, not only version-
 4. Repository and npm evidence schemas remain compatible or have documented version increments.
 5. Third-party Actions remain pinned to reviewed full commit SHAs.
 6. Security-sensitive changes have an explicit review record.
-7. The changelog states added, changed, fixed, security, and known-limitation information as applicable.
+7. The intended commit is the current, green `main` commit.
 
-## Release procedure
+## Automated owner-only release bootstrap
+
+Creating a branch named `release/vX.Y.Z` at the exact current `main` commit triggers `.github/workflows/release.yml`.
+
+The workflow:
+
+1. runs only when the branch push actor is the repository owner;
+2. rejects a bootstrap branch that does not equal the current `main` commit;
+3. validates the version/tag relationship and full test suite;
+4. creates an immutable annotated `vX.Y.Z` tag if it does not already exist;
+5. builds the wheel and source archive;
+6. creates `SHA256SUMS`;
+7. publishes the GitHub Release; and
+8. removes the temporary bootstrap branch.
+
+The bootstrap path is useful when repository automation can create branches but cannot create Git tag objects directly. It does not pretend the automatically created annotated tag has a maintainer GPG signature; the tagged commit itself should be a verified, reviewed merge commit.
+
+## Manual signed-tag alternative
+
+A maintainer with local signing and Git push access may instead run:
 
 ```bash
 make check
@@ -22,9 +41,7 @@ git tag -s vX.Y.Z -m "ReleaseGuard vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-Pushing the tag runs `.github/workflows/release.yml`, which revalidates the tag/version relationship, runs tests, builds the wheel and source archive, creates SHA-256 checksums, and publishes a GitHub Release.
-
-A maintainer can rerun the workflow for an existing tag through `workflow_dispatch`; it does not create or move tags.
+Pushing the tag runs the same release workflow. `workflow_dispatch` can rerun an existing tag; it never moves or replaces a tag.
 
 ## GitHub Action version aliases
 

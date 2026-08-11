@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    branches: ["release/v*"]
   workflow_dispatch:
     inputs:
       tag:
@@ -15,24 +16,94 @@ permissions:
 
 jobs:
   release:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/release/') || github.actor == github.repository_owner }}
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
           fetch-depth: 0
+          fetch-tags: true
+
+      - id: release
+        name: Resolve release request
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          bootstrap=false
+          branch=""
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_TAG"
+          elif [[ "$GITHUB_REF" == refs/heads/release/v* ]]; then
+            tag="${GITHUB_REF#refs/heads/release/}"
+            branch="${GITHUB_REF#refs/heads/}"
+            bootstrap=true
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          else
+            echo "Unsupported release event: $GITHUB_REF" >&2
+            exit 64
+          fi
+
+          if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be an exact vX.Y.Z SemVer value" >&2
+            exit 64
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "bootstrap=$bootstrap" >> "$GITHUB_OUTPUT"
+
+      - name: Verify bootstrap branch is the current main commit
+        if: ${{ steps.release.outputs.bootstrap == 'true' }}
+        shell: bash
+        run: |
+          git fetch origin main --no-tags --depth=1
+          requested="$(git rev-parse HEAD)"
+          current_main="$(git rev-parse origin/main)"
+          if [[ "$requested" != "$current_main" ]]; then
+            echo "Bootstrap branch must point to the current main commit" >&2
+            echo "requested=$requested" >&2
+            echo "main=$current_main" >&2
+            exit 65
+          fi
+
+      - name: Create immutable release tag
+        if: ${{ steps.release.outputs.bootstrap == 'true' }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          target="$(git rev-parse HEAD)"
+          if git rev-parse --verify --quiet "refs/tags/$RELEASE_TAG" >/dev/null; then
+            tagged="$(git rev-list -n 1 "$RELEASE_TAG")"
+            if [[ "$tagged" != "$target" ]]; then
+              echo "Existing tag $RELEASE_TAG points to another commit" >&2
+              exit 66
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$RELEASE_TAG" "$target" -m "ReleaseGuard $RELEASE_TAG"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
+
       - name: Verify release state
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           python scripts/release_check.py --tag "$RELEASE_TAG"
           python -m unittest discover -s tests -v
           python -m compileall -q releaseguard tests scripts
+
       - name: Build artifacts
         shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           version="${RELEASE_TAG#v}"
           mkdir -p dist
@@ -43,11 +114,26 @@ jobs:
             --output="dist/ReleaseGuard-${version}-source.zip" \
             "$RELEASE_TAG"
           (cd dist && sha256sum * > SHA256SUMS)
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release create "$RELEASE_TAG" dist/* \
-            --verify-tag \
-            --generate-notes \
-            --title "ReleaseGuard $RELEASE_TAG"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub Release $RELEASE_TAG already exists; leaving it unchanged."
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --verify-tag \
+              --generate-notes \
+              --title "ReleaseGuard $RELEASE_TAG"
+          fi
+
+      - name: Remove bootstrap branch
+        if: ${{ success() && steps.release.outputs.bootstrap == 'true' }}
+        shell: bash
+        env:
+          RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+        run: |
+          git push origin --delete "$RELEASE_BRANCH" || \
+            echo "::warning::Release succeeded, but bootstrap branch cleanup must be completed manually."
