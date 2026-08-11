@@ -1,0 +1,52 @@
+name: Publish and verify npm provenance
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.18.1"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install current npm CLI
+        run: npm install --global --ignore-scripts npm@11.19.0
+
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm publish --ignore-scripts
+
+      - name: Read package identity
+        id: package
+        shell: bash
+        run: |
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Alpha usage. Pin ReleaseGuard to a reviewed commit SHA in production.
+      - uses: jerry0327/ReleaseGuard/actions/verify-npm@main
+        with:
+          package: ${{ steps.package.outputs.name }}
+          version: ${{ steps.package.outputs.version }}
+          repository: ${{ github.repository }}
+          workflow: .github/workflows/publish.yml
+          commit: ${{ github.sha }}
+          ref: ${{ github.ref }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: releaseguard-npm-evidence
+          path: |
+            releaseguard-npm-report.json
+            releaseguard-npm.sarif

@@ -1,0 +1,58 @@
+name: Attest ReleaseGuard npm evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      workflow:
+        required: true
+        type: string
+      commit:
+        required: true
+        type: string
+      ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: jerry0327/ReleaseGuard/actions/verify-npm@main
+        with:
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          repository: ${{ github.repository }}
+          workflow: ${{ inputs.workflow }}
+          commit: ${{ inputs.commit }}
+          ref: ${{ inputs.ref }}
+
+      # Optional first-party signing of the ReleaseGuard report itself.
+      - name: Attest the ReleaseGuard evidence report
+        if: always() && hashFiles('releaseguard-npm-report.json') != ''
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: releaseguard-npm-report.json
+
+      - name: Retain npm provenance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: releaseguard-npm-evidence
+          path: |
+            releaseguard-npm-report.json
+            releaseguard-npm.sarif
+          if-no-files-found: ignore
