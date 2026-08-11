@@ -1,0 +1,21 @@
+name: Feature request
+description: Propose a release invariant, ecosystem integration, or maintainer workflow improvement
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: threat
+    attributes:
+      label: Threat or maintainer problem
+      description: What attacker behavior or release-maintenance burden should this address?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Deterministic evidence
+      description: What observable repository, registry, or release evidence could support the feature?
+  - type: textarea
+    id: false_positives
+    attributes:
+      label: Expected false positives / tradeoffs

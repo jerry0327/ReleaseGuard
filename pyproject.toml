@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "releaseguard"
+version = "0.1.0"
+description = "A deterministic security gate for software release diffs"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "ReleaseGuard contributors"}]
+keywords = ["supply-chain", "security", "github-actions", "release", "oss"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Security",
+]
+dependencies = []
+
+[project.scripts]
+releaseguard = "releaseguard.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["releaseguard*"]

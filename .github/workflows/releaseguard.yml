@@ -1,0 +1,27 @@
+name: ReleaseGuard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan release delta
+        uses: ./
+        with:
+          config: releaseguard.toml
+          report-path: releaseguard-report.json
+      - name: Upload policy evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: releaseguard-evidence
+          path: releaseguard-report.json
+          if-no-files-found: ignore
